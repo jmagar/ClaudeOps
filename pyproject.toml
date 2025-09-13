@@ -1,5 +1,5 @@
 [project]
-name = "claudeops"
+name = "claude-agents"
 version = "0.1.0"
 description = "AI-powered homelab automation system with Claude-driven agents"
 readme = "README.md"
@@ -72,3 +72,9 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
 ]
+
+[tool.coverage.run]
+data_file = ".cache/pytest/.coverage"
+
+[tool.coverage.html]
+directory = ".cache/pytest/htmlcov"
