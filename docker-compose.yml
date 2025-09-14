@@ -1,0 +1,284 @@
+# ClaudeOps Docker Compose Configuration
+# Production deployment with monitoring and backup services
+
+version: '3.8'
+
+services:
+  # Main ClaudeOps Application
+  claudeops:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: claudeops-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    environment:
+      # Core Configuration
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://claudeops.yourdomain.com}
+      NEXT_PUBLIC_APP_NAME: ClaudeOps
+      
+      # Database
+      DATABASE_URL: sqlite:/app/data/production.db
+      
+      # API Keys
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      
+      # WebSocket Configuration
+      WEBSOCKET_PORT: 3001
+      WEBSOCKET_HOST: 0.0.0.0
+      
+      # Security
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXT_PUBLIC_APP_URL:-https://claudeops.yourdomain.com}
+      
+      # Cost Management
+      COST_ALERT_THRESHOLD: ${COST_ALERT_THRESHOLD:-50.00}
+      MONTHLY_BUDGET_LIMIT: ${MONTHLY_BUDGET_LIMIT:-500.00}
+      COST_BUDGET_DAILY: ${COST_BUDGET_DAILY:-25.00}
+      COST_BUDGET_MONTHLY: ${COST_BUDGET_MONTHLY:-500.00}
+      
+      # Agent Configuration
+      MAX_CONCURRENT_EXECUTIONS: ${MAX_CONCURRENT_EXECUTIONS:-5}
+      MAX_CONCURRENT_AGENTS: ${MAX_CONCURRENT_AGENTS:-5}
+      DEFAULT_AGENT_TIMEOUT: ${DEFAULT_AGENT_TIMEOUT:-300000}
+      AGENT_MEMORY_LIMIT: ${AGENT_MEMORY_LIMIT:-1024}
+      AGENT_CPU_LIMIT: ${AGENT_CPU_LIMIT:-80}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+      LOG_FILE_PATH: /app/logs/claudeops-production.log
+      
+      # Performance
+      CONFIG_CACHE_TTL: ${CONFIG_CACHE_TTL:-300000}
+      DISABLE_HOT_RELOAD: true
+      
+      # Health Check
+      HEALTH_CHECK_INTERVAL: ${HEALTH_CHECK_INTERVAL:-60000}
+      HEALTH_CHECK_TIMEOUT: ${HEALTH_CHECK_TIMEOUT:-10000}
+      
+      # Rate Limiting
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-1000}
+      
+      # Monitoring
+      ENABLE_METRICS: ${ENABLE_METRICS:-true}
+      METRICS_PORT: ${METRICS_PORT:-9090}
+      
+      # Backup
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    
+    volumes:
+      # Persistent data
+      - claudeops_data:/app/data
+      - claudeops_logs:/app/logs
+      - claudeops_backups:/app/backups
+      - claudeops_temp:/app/temp
+      
+      # Optional: SSL certificates
+      - ${SSL_CERTS_PATH:-./certs}:/app/certs:ro
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    depends_on:
+      - backup-service
+    
+    networks:
+      - claudeops-network
+    
+    labels:
+      - "com.claudeops.service=main"
+      - "com.claudeops.version=1.0.0"
+
+  # Backup Service
+  backup-service:
+    image: alpine:3.18
+    container_name: claudeops-backup
+    restart: unless-stopped
+    environment:
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL_HOURS:-24}
+      RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_PATH: /backups
+      DATA_PATH: /data
+    volumes:
+      - claudeops_data:/data:ro
+      - claudeops_backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    command: >
+      sh -c "
+        apk add --no-cache sqlite curl &&
+        chmod +x /backup.sh &&
+        while true; do
+          /backup.sh
+          sleep $$(( BACKUP_INTERVAL * 3600 ))
+        done
+      "
+    networks:
+      - claudeops-network
+    labels:
+      - "com.claudeops.service=backup"
+
+  # Log Rotation Service (Optional)
+  log-rotator:
+    image: alpine:3.18
+    container_name: claudeops-log-rotator
+    restart: unless-stopped
+    volumes:
+      - claudeops_logs:/logs
+    command: >
+      sh -c "
+        apk add --no-cache logrotate &&
+        cat > /etc/logrotate.conf << 'EOF'
+        /logs/*.log {
+          daily
+          missingok
+          rotate 30
+          compress
+          notifempty
+          create 0644 root root
+        }
+        EOF
+        while true; do
+          logrotate /etc/logrotate.conf
+          sleep 86400
+        done
+      "
+    networks:
+      - claudeops-network
+    labels:
+      - "com.claudeops.service=log-rotator"
+
+  # Reverse Proxy with SSL (Optional - using Traefik)
+  reverse-proxy:
+    image: traefik:v3.0
+    container_name: claudeops-proxy
+    restart: unless-stopped
+    command:
+      - --api.dashboard=true
+      - --api.insecure=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@yourdomain.com}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      # Enable metrics
+      - --metrics.prometheus=true
+      - --metrics.prometheus.addEntryPointsLabels=true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - claudeops_certs:/letsencrypt
+    environment:
+      - TRAEFIK_DOMAIN=${TRAEFIK_DOMAIN:-claudeops.yourdomain.com}
+    networks:
+      - claudeops-network
+    labels:
+      - "com.claudeops.service=proxy"
+      # Traefik dashboard
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${TRAEFIK_DOMAIN:-claudeops.yourdomain.com}`)"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+    profiles:
+      - proxy
+
+  # Monitoring with Prometheus (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: claudeops-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.external-url=http://localhost:9090'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - claudeops_prometheus:/prometheus
+    networks:
+      - claudeops-network
+    profiles:
+      - monitoring
+
+  # Grafana Dashboard (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: claudeops-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - claudeops_grafana:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+    networks:
+      - claudeops-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+# Named volumes for data persistence
+volumes:
+  claudeops_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}
+  
+  claudeops_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_PATH:-./logs}
+  
+  claudeops_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${BACKUPS_PATH:-./backups}
+  
+  claudeops_temp:
+    driver: local
+  
+  claudeops_certs:
+    driver: local
+  
+  claudeops_prometheus:
+    driver: local
+  
+  claudeops_grafana:
+    driver: local
+
+# Network configuration
+networks:
+  claudeops-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
