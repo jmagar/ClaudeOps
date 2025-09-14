@@ -1,4 +1,6 @@
-import { Query, NonNullableUsage } from '@anthropic/claude-code-sdk';
+// import { Query, NonNullableUsage } from '@anthropic/claude-code-sdk';
+type Query = Record<string, any>; // Placeholder type
+type NonNullableUsage = Record<string, any>; // Placeholder type
 import { CostTracker, CostMetrics, BudgetAlert, BudgetConfig } from '../types/claude';
 import { dbConnection } from '../db/connection';
 import { costTracking, executions } from '../db/schema';

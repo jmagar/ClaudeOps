@@ -38,8 +38,8 @@ export class ConnectionManager {
   private executionSubscriptions = new Map<string, Set<string>>(); // executionId -> Set<clientId>
   private rateLimiter: RateLimiter;
   private backpressureHandler: BackpressureHandler;
-  private heartbeatInterval: NodeJS.Timeout;
-  private statsInterval: NodeJS.Timeout;
+  private heartbeatInterval!: NodeJS.Timeout;
+  private statsInterval!: NodeJS.Timeout;
   private startTime = Date.now();
 
   private readonly heartbeatIntervalMs = 30000; // 30 seconds

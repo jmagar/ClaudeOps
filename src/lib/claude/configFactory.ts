@@ -1,4 +1,5 @@
-import { Options } from '@anthropic/claude-code-sdk';
+// import { Options } from '@anthropic/claude-code-sdk';
+type Options = Record<string, any>; // Placeholder type
 import { AgentType, SDKConfigOptions } from '../types/claude';
 
 export class SDKConfigFactory {

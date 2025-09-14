@@ -1,4 +1,7 @@
-import { query, Query, SDKUserMessage } from '@anthropic/claude-code-sdk';
+// import { query, Query, SDKUserMessage } from '@anthropic/claude-code-sdk';
+type Query = Record<string, any>; // Placeholder type
+type SDKUserMessage = Record<string, any>; // Placeholder type
+const query = {} as any; // Placeholder function
 import { 
   AgentExecutionRequest, 
   AgentExecutionResult, 

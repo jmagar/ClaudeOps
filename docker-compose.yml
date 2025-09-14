@@ -1,7 +1,7 @@
 # ClaudeOps Docker Compose Configuration
 # Production deployment with monitoring and backup services
 
-version: '3.8'
+# Docker Compose version is now automatically detected
 
 services:
   # Main ClaudeOps Application

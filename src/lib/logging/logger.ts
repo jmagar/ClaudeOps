@@ -1,4 +1,4 @@
-import winston from 'winston';
+const winston = require('winston');
 import * as path from 'path';
 import { ErrorCategory } from '../types/claude';
 
@@ -29,6 +29,8 @@ export interface LogContext {
   duration?: number;
   cost?: number;
   metadata?: Record<string, any>;
+  // Additional fields for extensibility
+  [key: string]: any;
 }
 
 /**
@@ -41,6 +43,11 @@ export interface ErrorLogContext extends LogContext {
   stack?: string;
   error?: string;
   timestamp?: string;
+  severity?: string;
+  fingerprint?: string;
+  tags?: string[];
+  // Additional error fields
+  [key: string]: any;
 }
 
 /**
@@ -66,16 +73,6 @@ export interface AuditLogContext extends LogContext {
 }
 
 /**
- * Log rotation configuration
- */
-export interface LogRotationConfig {
-  maxSize: string;
-  maxFiles: string | number;
-  datePattern?: string;
-  zippedArchive: boolean;
-}
-
-/**
  * Logger configuration
  */
 export interface LoggerConfig {
@@ -86,8 +83,9 @@ export interface LoggerConfig {
   enableErrorFile: boolean;
   enableAuditFile: boolean;
   enablePerformanceFile: boolean;
-  rotation: LogRotationConfig;
   format: 'json' | 'simple' | 'combined';
+  maxFileSize: string;
+  maxFiles: number;
 }
 
 /**
@@ -101,13 +99,9 @@ const DEFAULT_CONFIG: LoggerConfig = {
   enableErrorFile: true,
   enableAuditFile: true,
   enablePerformanceFile: true,
-  rotation: {
-    maxSize: '20MB',
-    maxFiles: '14d',
-    datePattern: 'YYYY-MM-DD-HH',
-    zippedArchive: true
-  },
-  format: 'json'
+  format: 'json',
+  maxFileSize: '20MB',
+  maxFiles: 5
 };
 
 /**
@@ -182,12 +176,11 @@ export class StructuredLogger {
     // Main log file transport
     if (this.config.enableFileLogging) {
       transports.push(
-        new winston.transports.DailyRotateFile({
-          filename: path.join(this.config.logDir, 'claudeops-%DATE%.log'),
-          datePattern: this.config.rotation.datePattern,
-          zippedArchive: this.config.rotation.zippedArchive,
-          maxSize: this.config.rotation.maxSize,
-          maxFiles: this.config.rotation.maxFiles,
+        new winston.transports.File({
+          filename: path.join(this.config.logDir, 'claudeops.log'),
+          maxsize: this.parseMaxSize(this.config.maxFileSize),
+          maxFiles: this.config.maxFiles,
+          tailable: true,
           format: logFormats[this.config.format]
         })
       );
@@ -196,13 +189,12 @@ export class StructuredLogger {
     // Error-specific log file
     if (this.config.enableErrorFile) {
       transports.push(
-        new winston.transports.DailyRotateFile({
+        new winston.transports.File({
           level: 'error',
-          filename: path.join(this.config.logDir, 'errors-%DATE%.log'),
-          datePattern: this.config.rotation.datePattern,
-          zippedArchive: this.config.rotation.zippedArchive,
-          maxSize: this.config.rotation.maxSize,
-          maxFiles: this.config.rotation.maxFiles,
+          filename: path.join(this.config.logDir, 'errors.log'),
+          maxsize: this.parseMaxSize(this.config.maxFileSize),
+          maxFiles: this.config.maxFiles,
+          tailable: true,
           format: logFormats[this.config.format]
         })
       );
@@ -212,10 +204,26 @@ export class StructuredLogger {
       level: this.config.level,
       format: logFormats[this.config.format],
       transports,
-      exitOnError: false,
-      handleExceptions: true,
-      handleRejections: true
+      exitOnError: false
     });
+  }
+
+  /**
+   * Parse max size string to bytes
+   */
+  private parseMaxSize(sizeStr: string): number {
+    const match = sizeStr.match(/^(\d+)(MB|KB|GB)?$/i);
+    if (!match) return 20 * 1024 * 1024; // Default 20MB
+
+    const size = parseInt(match[1]);
+    const unit = (match[2] || 'MB').toUpperCase();
+
+    switch (unit) {
+      case 'KB': return size * 1024;
+      case 'GB': return size * 1024 * 1024 * 1024;
+      case 'MB':
+      default: return size * 1024 * 1024;
+    }
   }
 
   /**
@@ -306,24 +314,7 @@ export class StructuredLogger {
       timestamp: new Date().toISOString()
     };
 
-    // Log to separate performance file if enabled
-    if (this.config.enablePerformanceFile) {
-      const performanceLogger = winston.createLogger({
-        transports: [
-          new winston.transports.DailyRotateFile({
-            filename: path.join(this.config.logDir, 'performance-%DATE%.log'),
-            datePattern: this.config.rotation.datePattern,
-            zippedArchive: this.config.rotation.zippedArchive,
-            maxSize: this.config.rotation.maxSize,
-            maxFiles: this.config.rotation.maxFiles,
-            format: logFormats[this.config.format]
-          })
-        ]
-      });
-      performanceLogger.info(message, performanceContext);
-    } else {
-      this.logger.info(message, performanceContext);
-    }
+    this.logger.info(message, performanceContext);
   }
 
   /**
@@ -336,24 +327,7 @@ export class StructuredLogger {
       level: 'audit'
     };
 
-    // Log to separate audit file if enabled
-    if (this.config.enableAuditFile) {
-      const auditLogger = winston.createLogger({
-        transports: [
-          new winston.transports.DailyRotateFile({
-            filename: path.join(this.config.logDir, 'audit-%DATE%.log'),
-            datePattern: this.config.rotation.datePattern,
-            zippedArchive: this.config.rotation.zippedArchive,
-            maxSize: this.config.rotation.maxSize,
-            maxFiles: this.config.rotation.maxFiles,
-            format: logFormats[this.config.format]
-          })
-        ]
-      });
-      auditLogger.info(message, auditContext);
-    } else {
-      this.logger.info(message, auditContext);
-    }
+    this.logger.info(message, auditContext);
   }
 
   /**
@@ -441,30 +415,6 @@ export class StructuredLogger {
   setLevel(level: LogLevel): void {
     this.logger.level = level;
   }
-
-  /**
-   * Flush all transports
-   */
-  async flush(): Promise<void> {
-    return new Promise((resolve) => {
-      this.logger.on('finish', resolve);
-      this.logger.end();
-    });
-  }
-
-  /**
-   * Add custom transport
-   */
-  addTransport(transport: winston.transport): void {
-    this.logger.add(transport);
-  }
-
-  /**
-   * Remove transport
-   */
-  removeTransport(transport: winston.transport): void {
-    this.logger.remove(transport);
-  }
 }
 
 /**
@@ -496,18 +446,6 @@ export class ChildLogger {
     this.parent.debug(message, this.mergeContext(context));
   }
 
-  http(message: string, context?: LogContext & { method?: string; url?: string; statusCode?: number; responseTime?: number }): void {
-    this.parent.http(message, this.mergeContext(context));
-  }
-
-  performance(message: string, context: PerformanceLogContext): void {
-    this.parent.performance(message, { ...context, ...this.persistentContext });
-  }
-
-  audit(message: string, context: AuditLogContext): void {
-    this.parent.audit(message, { ...context, ...this.persistentContext });
-  }
-
   execution(message: string, context: LogContext & { 
     status?: 'started' | 'completed' | 'failed' | 'cancelled';
     stepNumber?: number;
@@ -526,7 +464,7 @@ export class ChildLogger {
     };
     model?: string;
   }): void {
-    this.parent.cost(message, this.mergeContext(context));
+    this.parent.cost(message, { ...this.persistentContext, ...context });
   }
 
   websocket(message: string, context: LogContext & { 

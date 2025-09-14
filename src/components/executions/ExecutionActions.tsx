@@ -72,10 +72,8 @@ export default function ExecutionActions({
       
       const result = await response.json();
       
-      toast({
-        title: 'Execution Cancelled',
-        description: `Successfully cancelled execution ${executionId.substring(0, 8)}`,
-        variant: 'default'
+      toast.success('Execution Cancelled', {
+        description: `Successfully cancelled execution ${executionId.substring(0, 8)}`
       });
       
       // Refresh the page to show updated status
@@ -83,10 +81,8 @@ export default function ExecutionActions({
       
     } catch (error) {
       console.error('Failed to cancel execution:', error);
-      toast({
-        title: 'Cancellation Failed',
-        description: error instanceof Error ? error.message : 'Failed to cancel execution',
-        variant: 'destructive'
+      toast.error('Cancellation Failed', {
+        description: error instanceof Error ? error.message : 'Failed to cancel execution'
       });
     } finally {
       setActionState(prev => ({ ...prev, cancelling: false }));
@@ -115,10 +111,8 @@ export default function ExecutionActions({
       
       const result = await response.json();
       
-      toast({
-        title: 'Execution Restarted',
-        description: `Started new execution with ID ${result.executionId.substring(0, 8)}`,
-        variant: 'default'
+      toast.success('Execution Restarted', {
+        description: `Started new execution with ID ${result.executionId.substring(0, 8)}`
       });
       
       // Navigate to the new execution
@@ -126,10 +120,8 @@ export default function ExecutionActions({
       
     } catch (error) {
       console.error('Failed to restart execution:', error);
-      toast({
-        title: 'Restart Failed',
-        description: error instanceof Error ? error.message : 'Failed to restart execution',
-        variant: 'destructive'
+      toast.error('Restart Failed', {
+        description: error instanceof Error ? error.message : 'Failed to restart execution'
       });
     } finally {
       setActionState(prev => ({ ...prev, restarting: false }));
@@ -154,18 +146,14 @@ export default function ExecutionActions({
       } else {
         // Fallback to clipboard
         await navigator.clipboard.writeText(shareUrl);
-        toast({
-          title: 'Link Copied',
-          description: 'Execution link has been copied to clipboard',
-          variant: 'default'
+        toast.success('Link Copied', {
+          description: 'Execution link has been copied to clipboard'
         });
       }
     } catch (error) {
       console.error('Failed to share execution:', error);
-      toast({
-        title: 'Sharing Failed',
-        description: 'Failed to share execution link',
-        variant: 'destructive'
+      toast.error('Sharing Failed', {
+        description: 'Failed to share execution link'
       });
     } finally {
       setActionState(prev => ({ ...prev, sharing: false }));
@@ -176,17 +164,13 @@ export default function ExecutionActions({
   const handleCopyId = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(executionId);
-      toast({
-        title: 'Execution ID Copied',
-        description: 'Execution ID has been copied to clipboard',
-        variant: 'default'
+      toast.success('Execution ID Copied', {
+        description: 'Execution ID has been copied to clipboard'
       });
     } catch (error) {
       console.error('Failed to copy execution ID:', error);
-      toast({
-        title: 'Copy Failed',
-        description: 'Failed to copy execution ID',
-        variant: 'destructive'
+      toast.error('Copy Failed', {
+        description: 'Failed to copy execution ID'
       });
     }
   }, [executionId]);
@@ -213,17 +197,13 @@ export default function ExecutionActions({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      toast({
-        title: 'Export Complete',
-        description: `Execution data exported as ${filename}`,
-        variant: 'default'
+      toast.success('Export Complete', {
+        description: `Execution data exported as ${filename}`
       });
     } catch (error) {
       console.error('Failed to export execution:', error);
-      toast({
-        title: 'Export Failed',
-        description: 'Failed to export execution data',
-        variant: 'destructive'
+      toast.error('Export Failed', {
+        description: 'Failed to export execution data'
       });
     }
   }, [executionId, agentType]);

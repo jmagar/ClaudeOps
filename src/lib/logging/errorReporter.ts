@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import { EventEmitter } from 'events';
 import { logger, LogContext } from './logger';
 import { ErrorUtils, ErrorSeverity } from '../utils/errorUtils';
 import { EnhancedError, ErrorCategory } from '../types/claude';

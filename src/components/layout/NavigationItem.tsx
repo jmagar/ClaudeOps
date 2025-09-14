@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -34,7 +35,7 @@ export function NavigationItem({
 
   const content = (
     <Link
-      href={href}
+      href={href as Route}
       onClick={onClick}
       className={cn(
         'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',

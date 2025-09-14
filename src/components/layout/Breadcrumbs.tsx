@@ -2,6 +2,7 @@
 
 import { Fragment } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import { Home } from 'lucide-react';
 import {
@@ -135,7 +136,7 @@ export function Breadcrumbs({
                 {item.href ? (
                   <BreadcrumbLink asChild>
                     <Link 
-                      href={item.href}
+                      href={item.href as Route}
                       className="flex items-center gap-1.5"
                     >
                       {isFirst && homeIcon && item.icon && (

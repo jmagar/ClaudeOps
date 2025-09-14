@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { systemMonitor } from './systemMonitor';
 import { metricsCollector } from './metricsCollector';
 import { alertManager } from './alertManager';
@@ -129,14 +129,14 @@ export class MonitoringScheduler extends EventEmitter {
     this.isRunning = false;
 
     // Stop all cron jobs
-    for (const [taskId, cronJob] of this.cronJobs.entries()) {
+    for (const [taskId, cronJob] of Array.from(this.cronJobs.entries())) {
       cronJob.stop();
       cronJob.destroy();
       this.cronJobs.delete(taskId);
     }
 
     // Clear retry queues
-    for (const [taskId, timeouts] of this.retryQueues.entries()) {
+    for (const [taskId, timeouts] of Array.from(this.retryQueues.entries())) {
       timeouts.forEach(timeout => clearTimeout(timeout));
     }
     this.retryQueues.clear();
@@ -306,7 +306,7 @@ export class MonitoringScheduler extends EventEmitter {
     let nextScheduledTask: SchedulerStats['nextScheduledTask'];
     let earliestNextRun: Date | null = null;
     
-    for (const task of this.tasks.values()) {
+    for (const task of Array.from(this.tasks.values())) {
       if (task.enabled && task.nextRun) {
         const nextRun = new Date(task.nextRun);
         if (!earliestNextRun || nextRun < earliestNextRun) {

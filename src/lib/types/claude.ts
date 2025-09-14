@@ -1,45 +1,96 @@
-import { 
-  Options, 
-  Query,
-  NonNullableUsage,
-  SDKResultMessage,
-  SDKUserMessage,
-  PermissionMode,
-  PermissionResult,
-  PermissionUpdate,
-  ToolInput,
-  ToolOutput,
-  HookEvent,
-  HookCallbackMatcher,
-  HookJSONOutput,
-  PreToolUseHookInput,
-  PostToolUseHookInput,
-  SessionStartHookInput,
-  SessionEndHookInput,
-  NotificationHookInput
-} from '@anthropic/claude-code-sdk';
+// Claude SDK types (placeholder until SDK is available)
+export interface Options {
+  model: string;
+  maxTurns?: number;
+  maxThinkingTokens?: number;
+  cwd?: string;
+  permissionMode?: string;
+  executableArgs?: string[];
+  env?: Record<string, string | undefined>;
+}
 
-// Core Claude SDK types re-export
-export {
-  Options,
-  Query,
-  NonNullableUsage,
-  SDKResultMessage,
-  SDKUserMessage,
-  PermissionMode,
-  PermissionResult,
-  PermissionUpdate,
-  ToolInput,
-  ToolOutput,
-  HookEvent,
-  HookCallbackMatcher,
-  HookJSONOutput,
-  PreToolUseHookInput,
-  PostToolUseHookInput,
-  SessionStartHookInput,
-  SessionEndHookInput,
-  NotificationHookInput
-};
+export interface Query {
+  prompt: string;
+  options?: Partial<Options>;
+}
+
+export interface NonNullableUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+}
+
+export interface SDKResultMessage {
+  type: 'result';
+  total_cost_usd: number;
+  duration_ms: number;
+  usage: NonNullableUsage;
+}
+
+export interface SDKUserMessage {
+  type: 'user';
+  content: string;
+}
+
+export type PermissionMode = 'acceptEdits' | 'requireApproval' | 'denyAll';
+
+export interface PermissionResult {
+  allowed: boolean;
+  reason?: string;
+}
+
+export interface PermissionUpdate {
+  mode: PermissionMode;
+}
+
+export interface ToolInput {
+  name: string;
+  parameters: Record<string, any>;
+}
+
+export interface ToolOutput {
+  success: boolean;
+  result?: any;
+  error?: string;
+}
+
+export interface HookEvent {
+  type: string;
+  data: any;
+}
+
+export interface HookCallbackMatcher {
+  eventType: string;
+}
+
+export interface HookJSONOutput {
+  event: string;
+  data: any;
+}
+
+export interface PreToolUseHookInput {
+  toolName: string;
+  parameters: Record<string, any>;
+}
+
+export interface PostToolUseHookInput {
+  toolName: string;
+  result: any;
+}
+
+export interface SessionStartHookInput {
+  sessionId: string;
+}
+
+export interface SessionEndHookInput {
+  sessionId: string;
+}
+
+export interface NotificationHookInput {
+  message: string;
+  level: 'info' | 'warning' | 'error';
+}
 
 // Agent Configuration Types
 export interface AgentConfig {
@@ -162,6 +213,9 @@ export interface EnhancedError extends Error {
   retryable: boolean;
   resolution?: string;
   context?: Record<string, unknown>;
+  classification?: any;
+  fingerprint?: string;
+  timestamp?: string;
 }
 
 export interface ExecutionError {

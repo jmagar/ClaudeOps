@@ -375,7 +375,16 @@ export class WebSocketManager {
   healthCheck(): {
     healthy: boolean;
     issues: string[];
-    stats: ReturnType<typeof this.getStats>;
+    stats: {
+      connections: number;
+      activeConnections: number;
+      totalMessages: number;
+      uptime: number;
+      wsServer: {
+        clients: number;
+        listening: boolean;
+      };
+    };
   } {
     const issues: string[] = [];
     const stats = this.getStats();

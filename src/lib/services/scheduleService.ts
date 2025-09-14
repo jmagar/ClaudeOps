@@ -273,35 +273,39 @@ export class ScheduleService {
         conditions.push(eq(schedules.enabled, enabled));
       }
 
-      // Build query
-      let query = db.select().from(schedules);
+      // Build query with conditions and ordering
+      const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
       
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-      }
-
-      // Apply ordering
+      // Select order column based on orderBy parameter
+      let orderColumn;
       switch (orderBy) {
         case 'name':
-          query = orderDirection === 'asc' ? query.orderBy(asc(schedules.name)) : query.orderBy(desc(schedules.name));
+          orderColumn = orderDirection === 'asc' ? asc(schedules.name) : desc(schedules.name);
           break;
         case 'nextRun':
-          query = orderDirection === 'asc' ? query.orderBy(asc(schedules.nextRun)) : query.orderBy(desc(schedules.nextRun));
+          orderColumn = orderDirection === 'asc' ? asc(schedules.nextRun) : desc(schedules.nextRun);
           break;
         case 'lastRun':
-          query = orderDirection === 'asc' ? query.orderBy(asc(schedules.lastRun)) : query.orderBy(desc(schedules.lastRun));
+          orderColumn = orderDirection === 'asc' ? asc(schedules.lastRun) : desc(schedules.lastRun);
           break;
         case 'createdAt':
-          query = orderDirection === 'asc' ? query.orderBy(asc(schedules.createdAt)) : query.orderBy(desc(schedules.createdAt));
+          orderColumn = orderDirection === 'asc' ? asc(schedules.createdAt) : desc(schedules.createdAt);
           break;
         default:
-          query = query.orderBy(asc(schedules.nextRun));
+          orderColumn = asc(schedules.nextRun);
       }
-
+      
+      // Build the query
+      let query = db.select().from(schedules);
+      if (whereCondition) {
+        query = query.where(whereCondition);
+      }
+      query = query.orderBy(orderColumn);
+      
       // Get total count
       let countQuery = db.select({ count: count() }).from(schedules);
-      if (conditions.length > 0) {
-        countQuery = countQuery.where(and(...conditions));
+      if (whereCondition) {
+        countQuery = countQuery.where(whereCondition);
       }
 
       const [{ count: total }] = await countQuery;

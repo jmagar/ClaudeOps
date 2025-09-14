@@ -139,6 +139,16 @@ export const RecordSystemMetricSchema = z.object({
   overallHealth: z.enum(['healthy', 'degraded', 'unhealthy']).optional(),
 });
 
+// Metrics Query Schema
+export const MetricsQuerySchema = z.object({
+  nodeId: z.string().default('localhost'),
+  timeframe: z.enum(['hour', 'day', 'week', 'month']).default('day'),
+  metrics: z.string().optional(), // comma-separated list
+  healthStatus: z.enum(['healthy', 'warning', 'critical']).optional(),
+  limit: z.number().int().positive().max(1000).default(100),
+  offset: z.number().int().nonnegative().default(0),
+}).merge(DateRangeSchema);
+
 // Bulk Operations Schemas
 export const BulkExecutionSchema = z.object({
   operations: z.array(z.object({
@@ -178,6 +188,7 @@ export type CreateScheduleRequest = z.infer<typeof CreateScheduleSchema>;
 export type UpdateScheduleRequest = z.infer<typeof UpdateScheduleSchema>;
 export type HealthCheckQuery = z.infer<typeof HealthCheckQuerySchema>;
 export type RecordSystemMetricRequest = z.infer<typeof RecordSystemMetricSchema>;
+export type MetricsQuery = z.infer<typeof MetricsQuerySchema>;
 export type SearchQuery = z.infer<typeof SearchQuerySchema>;
 export type ExportQuery = z.infer<typeof ExportQuerySchema>;
 

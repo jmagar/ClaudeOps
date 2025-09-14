@@ -434,15 +434,7 @@ export class AlertManager extends EventEmitter {
           const status = alert.severity === 'critical' || alert.severity === 'error' ? 'error' :
                         alert.severity === 'warning' ? 'warning' : 'healthy';
           
-          wsManager.broadcastSystemStatus(status, {
-            alert: {
-              id: alert.id,
-              title: alert.title,
-              message: alert.message,
-              severity: alert.severity,
-              timestamp: alert.timestamp
-            }
-          });
+          wsManager.broadcastSystemStatus(status);
         }
       }
     });
@@ -623,7 +615,7 @@ export class AlertManager extends EventEmitter {
     const cutoff = new Date(now.getTime() - this.config.alertRetentionHours * 60 * 60 * 1000);
     
     let cleanupCount = 0;
-    for (const [alertId, alert] of this.alerts.entries()) {
+    for (const [alertId, alert] of Array.from(this.alerts.entries())) {
       if (new Date(alert.timestamp) < cutoff && alert.resolved) {
         this.alerts.delete(alertId);
         cleanupCount++;
@@ -665,7 +657,7 @@ export class AlertManager extends EventEmitter {
     // For now, we'll just clean up old suppressions
     const now = new Date();
     
-    for (const [key, suppression] of this.suppressions.entries()) {
+    for (const [key, suppression] of Array.from(this.suppressions.entries())) {
       if (suppression.until <= now) {
         this.suppressions.delete(key);
       }

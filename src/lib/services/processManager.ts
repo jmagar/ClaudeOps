@@ -234,10 +234,10 @@ export class ProcessManager extends EventEmitter implements IProcessManager {
     const processInfo = this.processes.get(executionId);
     const childProcess = this.childProcesses.get(executionId);
     
-    return processInfo?.state === 'running' && 
-           childProcess && 
-           !childProcess.killed && 
-           childProcess.pid !== undefined;
+    return Boolean(processInfo?.state === 'running' && 
+                   childProcess && 
+                   !childProcess.killed && 
+                   childProcess.pid !== undefined);
   }
 
   /**

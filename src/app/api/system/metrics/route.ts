@@ -153,16 +153,16 @@ export const GET = withErrorHandler<SystemMetricsResponse | MetricsHistoryRespon
     
     switch (endpoint) {
       case 'overview':
-        return await getMetricsOverview(query);
+        return createSuccessResponse(await getMetricsOverview(query));
       
       case 'history':
-        return await getMetricsHistory(query);
+        return createSuccessResponse(await getMetricsHistory(query));
       
       case 'trends':
-        return await getMetricsTrends(query);
+        return createSuccessResponse(await getMetricsTrends(query));
       
       case 'health':
-        return await getSystemHealthSummary(query);
+        return createSuccessResponse(await getSystemHealthSummary(query));
       
       default:
         throw new Error(`Unknown endpoint: ${endpoint}`);
@@ -179,31 +179,41 @@ export const POST = withErrorHandler<any>(
     const body = await req.json();
     const { action, ...params } = body;
     
+    let result: any;
     switch (action) {
       case 'start_monitoring':
-        return await startMonitoring();
+        result = await startMonitoring();
+        break;
       
       case 'stop_monitoring':
-        return await stopMonitoring();
+        result = await stopMonitoring();
+        break;
       
       case 'collect_metrics':
-        return await collectMetricsNow();
+        result = await collectMetricsNow();
+        break;
       
       case 'run_health_check':
-        return await runHealthCheck();
+        result = await runHealthCheck();
+        break;
       
       case 'acknowledge_alert':
-        return await acknowledgeAlert(params.alertId, params.acknowledgedBy);
+        result = await acknowledgeAlert(params.alertId, params.acknowledgedBy);
+        break;
       
       case 'resolve_alert':
-        return await resolveAlert(params.alertId, params.resolvedBy);
+        result = await resolveAlert(params.alertId, params.resolvedBy);
+        break;
       
       case 'update_thresholds':
-        return await updateThresholds(params.thresholds);
+        result = await updateThresholds(params.thresholds);
+        break;
       
       default:
         throw new Error(`Unknown action: ${action}`);
     }
+    
+    return createSuccessResponse(result);
   }
 );
 
@@ -211,7 +221,6 @@ export const POST = withErrorHandler<any>(
  * Get metrics overview
  */
 async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsResponse> {
-  return await handleAsyncOperation(async () => {
     // Get current system stats
     const currentStats = systemMonitor.getLastStats();
     if (!currentStats) {
@@ -220,13 +229,13 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
 
     // Get health summary
     const healthResult = await metricsService.getLatestSystemHealth();
-    if (!healthResult.success) {
+    if (!healthResult.success || !healthResult.data) {
       throw new Error(`Failed to get system health: ${healthResult.error}`);
     }
 
     // Get trends for the last 24 hours
     const trendsResult = await metricsService.getMetricsTrends('localhost', 24);
-    if (!trendsResult.success) {
+    if (!trendsResult.success || !trendsResult.data) {
       throw new Error(`Failed to get trends: ${trendsResult.error}`);
     }
 
@@ -236,7 +245,7 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
       metricsService.getHealthStatistics('localhost', 24 * 7)
     ]);
 
-    if (!stats24h.success || !stats7d.success) {
+    if (!stats24h.success || !stats7d.success || !stats24h.data || !stats7d.data) {
       throw new Error('Failed to get aggregated statistics');
     }
 
@@ -276,7 +285,7 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
     const response: SystemMetricsResponse = {
       current: {
         timestamp: new Date().toISOString(),
-        status: healthResult.data.status,
+        status: healthResult.data!.status,
         cpu: currentStats.cpuUsage,
         memory: currentStats.memoryUsage,
         disk: currentStats.diskUsage,
@@ -284,7 +293,7 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
         uptime: currentStats.uptime,
         networkConnectivity: currentStats.networkConnectivity
       },
-      trends: trendsResult.data.map(trend => ({
+      trends: trendsResult.data!.map(trend => ({
         timestamp: trend.timestamp,
         cpu: trend.cpuUsage,
         memory: trend.memoryUsage,
@@ -295,39 +304,39 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
       aggregated: {
         last24Hours: {
           avg: {
-            cpu: stats24h.data.averages.cpu || 0,
-            memory: stats24h.data.averages.memory || 0,
-            disk: stats24h.data.averages.disk || 0
+            cpu: stats24h.data!.averages.cpu || 0,
+            memory: stats24h.data!.averages.memory || 0,
+            disk: stats24h.data!.averages.disk || 0
           },
           max: {
-            cpu: stats24h.data.maximums.cpu || 0,
-            memory: stats24h.data.maximums.memory || 0,
-            disk: stats24h.data.maximums.disk || 0
+            cpu: stats24h.data!.maximums.cpu || 0,
+            memory: stats24h.data!.maximums.memory || 0,
+            disk: stats24h.data!.maximums.disk || 0
           },
           min: {
-            cpu: stats24h.data.minimums.cpu || 0,
-            memory: stats24h.data.minimums.memory || 0,
-            disk: stats24h.data.minimums.disk || 0
+            cpu: stats24h.data!.minimums.cpu || 0,
+            memory: stats24h.data!.minimums.memory || 0,
+            disk: stats24h.data!.minimums.disk || 0
           },
-          healthDistribution: stats24h.data.healthDistribution
+          healthDistribution: stats24h.data!.healthDistribution
         },
         last7Days: {
           avg: {
-            cpu: stats7d.data.averages.cpu || 0,
-            memory: stats7d.data.averages.memory || 0,
-            disk: stats7d.data.averages.disk || 0
+            cpu: stats7d.data!.averages.cpu || 0,
+            memory: stats7d.data!.averages.memory || 0,
+            disk: stats7d.data!.averages.disk || 0
           },
           max: {
-            cpu: stats7d.data.maximums.cpu || 0,
-            memory: stats7d.data.maximums.memory || 0,
-            disk: stats7d.data.maximums.disk || 0
+            cpu: stats7d.data!.maximums.cpu || 0,
+            memory: stats7d.data!.maximums.memory || 0,
+            disk: stats7d.data!.maximums.disk || 0
           },
           min: {
-            cpu: stats7d.data.minimums.cpu || 0,
-            memory: stats7d.data.minimums.memory || 0,
-            disk: stats7d.data.minimums.disk || 0
+            cpu: stats7d.data!.minimums.cpu || 0,
+            memory: stats7d.data!.minimums.memory || 0,
+            disk: stats7d.data!.minimums.disk || 0
           },
-          healthDistribution: stats7d.data.healthDistribution
+          healthDistribution: stats7d.data!.healthDistribution
         }
       },
       alerts: {
@@ -343,20 +352,20 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
       monitoring: monitoringStats
     };
 
-    return createSuccessResponse(response);
-  });
+    return response;
 }
 
 /**
  * Get metrics history with pagination
  */
 async function getMetricsHistory(query: MetricsQuery): Promise<MetricsHistoryResponse> {
-  return await handleAsyncOperation(async () => {
     const filter: MetricsFilter = {
       nodeId: query.nodeId || 'localhost',
-      limit: query.limit || 100,
-      offset: query.offset || 0
+      limit: query.limit || 100
     };
+    
+    // Handle pagination separately since MetricsFilter doesn't have offset
+    const offset = query.offset || 0;
 
     if (query.dateFrom) {
       filter.dateFrom = new Date(query.dateFrom);
@@ -370,13 +379,13 @@ async function getMetricsHistory(query: MetricsQuery): Promise<MetricsHistoryRes
       filter.healthStatus = query.healthStatus as SystemHealthStatus;
     }
 
-    const result = await metricsService.getSystemMetrics(filter);
-    if (!result.success) {
-      throw new Error(`Failed to get metrics history: ${result.error}`);
+    const metricsResult = await metricsService.getSystemMetrics(filter);
+    if (!metricsResult.success || !metricsResult.data) {
+      throw new Error(`Failed to get metrics history: ${metricsResult.error}`);
     }
 
     const response: MetricsHistoryResponse = {
-      data: result.data.data.map(metric => ({
+      data: metricsResult.data.data.map(metric => ({
         timestamp: metric.timestamp,
         nodeId: metric.nodeId,
         cpu: metric.cpuUsagePercent,
@@ -385,25 +394,23 @@ async function getMetricsHistory(query: MetricsQuery): Promise<MetricsHistoryRes
         loadAverage1m: metric.loadAverage1m,
         loadAverage5m: metric.loadAverage5m,
         loadAverage15m: metric.loadAverage15m,
-        internetConnected: metric.internetConnected === 1,
+        internetConnected: Boolean(metric.internetConnected),
         claudeApiLatency: metric.claudeApiLatencyMs,
         overallHealth: metric.overallHealth as SystemHealthStatus
       })),
-      total: result.data.total,
-      page: result.data.page,
-      pageSize: result.data.pageSize,
-      hasMore: result.data.hasMore
+      total: metricsResult.data.total,
+      page: metricsResult.data.page,
+      pageSize: metricsResult.data.pageSize,
+      hasMore: metricsResult.data.hasMore
     };
 
-    return createSuccessResponse(response);
-  });
+    return response;
 }
 
 /**
  * Get metrics trends analysis
  */
 async function getMetricsTrends(query: MetricsQuery): Promise<MetricsTrendsResponse> {
-  return await handleAsyncOperation(async () => {
     const timeframe = query.timeframe || 'day';
     const metrics = query.metrics ? query.metrics.split(',') : ['cpu', 'memory', 'disk'];
     
@@ -414,21 +421,19 @@ async function getMetricsTrends(query: MetricsQuery): Promise<MetricsTrendsRespo
       trends
     };
 
-    return createSuccessResponse(response);
-  });
+    return response;
 }
 
 /**
  * Get system health summary with predictions
  */
 async function getSystemHealthSummary(query: MetricsQuery): Promise<SystemHealthSummaryResponse> {
-  return await handleAsyncOperation(async () => {
     const healthResult = await metricsService.getLatestSystemHealth();
-    if (!healthResult.success) {
+    if (!healthResult.success || !healthResult.data) {
       throw new Error(`Failed to get system health: ${healthResult.error}`);
     }
 
-    const health = healthResult.data;
+    const health = healthResult.data!
     
     // Calculate health score (0-100)
     const score = calculateHealthScore(health);
@@ -461,15 +466,13 @@ async function getSystemHealthSummary(query: MetricsQuery): Promise<SystemHealth
       predictions
     };
 
-    return createSuccessResponse(response);
-  });
+    return response;
 }
 
 /**
  * Start monitoring services
  */
-async function startMonitoring(): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function startMonitoring() {
     const results = {
       systemMonitor: false,
       metricsCollector: false,
@@ -497,18 +500,16 @@ async function startMonitoring(): Promise<any> {
       console.warn('Scheduler start warning:', error);
     }
 
-    return createSuccessResponse({
+    return {
       message: 'Monitoring services started',
       results
-    });
-  });
+    };
 }
 
 /**
  * Stop monitoring services
  */
-async function stopMonitoring(): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function stopMonitoring() {
     const results = {
       systemMonitor: false,
       metricsCollector: false,
@@ -535,91 +536,80 @@ async function stopMonitoring(): Promise<any> {
       console.warn('Scheduler stop warning:', error);
     }
 
-    return createSuccessResponse({
+    return {
       message: 'Monitoring services stopped',
       results
-    });
-  });
+    };
 }
 
 /**
  * Collect metrics immediately
  */
-async function collectMetricsNow(): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function collectMetricsNow() {
     const stats = await systemMonitor.collectNow();
     
-    return createSuccessResponse({
+    return {
       message: 'Metrics collected successfully',
       stats
-    });
-  });
+    };
 }
 
 /**
  * Run health check immediately
  */
-async function runHealthCheck(): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function runHealthCheck() {
     const taskId = 'manual_health_check';
     const result = await monitoringScheduler.executeTaskNow(taskId);
     
-    return createSuccessResponse({
+    return {
       message: 'Health check executed',
       result
-    });
-  });
+    };
 }
 
 /**
  * Acknowledge an alert
  */
-async function acknowledgeAlert(alertId: string, acknowledgedBy?: string): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function acknowledgeAlert(alertId: string, acknowledgedBy?: string) {
     const success = await alertManager.acknowledgeAlert(alertId, acknowledgedBy);
     
     if (!success) {
       throw new Error('Alert not found or already acknowledged');
     }
     
-    return createSuccessResponse({
+    return {
       message: 'Alert acknowledged successfully',
       alertId
-    });
-  });
+    };
 }
 
 /**
  * Resolve an alert
  */
-async function resolveAlert(alertId: string, resolvedBy?: string): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function resolveAlert(alertId: string, resolvedBy?: string) {
     const success = await alertManager.resolveAlert(alertId, resolvedBy);
     
     if (!success) {
       throw new Error('Alert not found or already resolved');
     }
     
-    return createSuccessResponse({
+    return {
       message: 'Alert resolved successfully',
       alertId
-    });
-  });
+    };
 }
 
 /**
  * Update monitoring thresholds
  */
-async function updateThresholds(thresholds: any): Promise<any> {
-  return await handleAsyncOperation(async () => {
+async function updateThresholds(thresholds: any) {
     // Update system monitor thresholds
     systemMonitor.updateConfig({ thresholds });
     
-    return createSuccessResponse({
+    return {
       message: 'Thresholds updated successfully',
       thresholds
-    });
-  });
+    };
 }
 
 /**

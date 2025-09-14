@@ -472,7 +472,7 @@ export class MetricsService {
       }
     }
 
-    if (data.loadAverage1m !== null) {
+    if (data.loadAverage1m !== null && data.loadAverage1m !== undefined) {
       if (data.loadAverage1m >= HEALTH_THRESHOLDS.loadAverage.critical) {
         issues.push('critical');
       } else if (data.loadAverage1m >= HEALTH_THRESHOLDS.loadAverage.warning) {

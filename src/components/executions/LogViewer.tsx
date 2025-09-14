@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FixedSizeList as List, ListChildComponentProps } from 'react-window';
+import * as ReactWindow from 'react-window';
+const List = ReactWindow.FixedSizeList;
+
+// Define the props interface locally since react-window types might be inconsistent
+interface ReactWindowChildProps {
+  index: number;
+  style: React.CSSProperties;
+  data: any;
+}
 import { LogEntry } from '@/hooks/useExecutionLogs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +26,7 @@ interface LogViewerProps {
   className?: string;
 }
 
-interface LogItemProps extends ListChildComponentProps {
+interface LogItemProps extends ReactWindowChildProps {
   data: {
     logs: LogEntry[];
     searchTerm: string;
@@ -64,9 +72,8 @@ const LogItem: React.FC<LogItemProps> = ({ index, style, data }) => {
       hour12: false, 
       hour: '2-digit', 
       minute: '2-digit', 
-      second: '2-digit',
-      fractionalSecondDigits: 3
-    });
+      second: '2-digit'
+    }) + '.' + String(date.getMilliseconds()).padStart(3, '0');
   };
 
   return (
