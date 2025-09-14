@@ -11,6 +11,8 @@ node_modules/
 
 # Next.js
 # next-env.d.ts is generated and should be committed
+.next/
+.vercel/
 
 # Production
 /build
