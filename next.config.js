@@ -1,11 +1,5 @@
-import { getNextJsConfig } from './src/lib/config/deploymentConfig.js';
-
 /** @type {import('next').NextConfig} */
-const deploymentConfig = getNextJsConfig();
-
 const nextConfig = {
-  // Environment-based configuration from deploymentConfig
-  ...deploymentConfig,
   
   // Core Next.js configuration
   typedRoutes: true,
@@ -34,7 +28,6 @@ const nextConfig = {
   // Environment variables
   env: {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     WEBSOCKET_PORT: process.env.WEBSOCKET_PORT,
   },

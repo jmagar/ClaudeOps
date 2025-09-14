@@ -186,7 +186,7 @@ export function SystemHealth() {
   }
 
   const getTrendIcon = (trend?: number) => {
-    if (!trend) return null
+    if (trend == null) return null
     if (Math.abs(trend) < 1) return <Minus className="h-3 w-3 text-gray-500" />
     return trend > 0 
       ? <TrendingUp className="h-3 w-3 text-red-500" />
@@ -324,7 +324,6 @@ export function SystemHealth() {
           <Progress 
             value={healthData.metrics.cpu.usage} 
             className="h-2"
-            // @ts-ignore - Adding custom className for progress color
             indicatorClassName={getUsageColor(healthData.metrics.cpu.usage)}
           />
           <div className="text-xs text-muted-foreground">
@@ -347,7 +346,6 @@ export function SystemHealth() {
           <Progress 
             value={healthData.metrics.memory.usage} 
             className="h-2"
-            // @ts-ignore - Adding custom className for progress color
             indicatorClassName={getUsageColor(healthData.metrics.memory.usage)}
           />
           <div className="text-xs text-muted-foreground">
@@ -369,7 +367,6 @@ export function SystemHealth() {
           <Progress 
             value={healthData.metrics.disk.usage} 
             className="h-2"
-            // @ts-ignore - Adding custom className for progress color
             indicatorClassName={getUsageColor(healthData.metrics.disk.usage)}
           />
           <div className="text-xs text-muted-foreground">

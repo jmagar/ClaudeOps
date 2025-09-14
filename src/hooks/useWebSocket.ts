@@ -40,9 +40,28 @@ interface UseWebSocketReturn {
   clearHistory: () => void;
 }
 
+// Auto-detect WebSocket URL based on current location
+function getWebSocketUrl(): string {
+  // Check for environment variable override first
+  if (process.env.NEXT_PUBLIC_WS_URL) {
+    const baseUrl = process.env.NEXT_PUBLIC_WS_URL;
+    return baseUrl.replace(/^http/, 'ws') + '/api/ws';
+  }
+
+  // Auto-detect from current location if available
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    return `${protocol}//${host}/api/ws`;
+  }
+
+  // Fallback for SSR
+  return 'ws://localhost:3000/api/ws';
+}
+
 export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
   const {
-    url = 'ws://localhost:3000/api/ws',
+    url = getWebSocketUrl(),
     enabled = true,
     autoConnect = true,
     reconnectAttempts = 10,

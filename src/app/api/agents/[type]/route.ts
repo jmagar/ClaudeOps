@@ -15,8 +15,25 @@ import { z } from 'zod';
 import type { AgentConfiguration } from '@/lib/types/database';
 
 interface RouteContext {
-  params: Promise<{ type: string }>;
+  params: { type: string };
 }
+
+// Schema for toggling agent enabled status
+const EnabledToggleSchema = z.object({
+  enabled: z.boolean()
+});
+
+// Schema for DELETE query params (force parameter)
+const DeleteQuerySchema = z.object({
+  force: z.preprocess(
+    (val) => {
+      if (val === 'true') return true;
+      if (val === 'false') return false;
+      return val;
+    },
+    z.boolean().default(false)
+  )
+});
 
 /**
  * GET /api/agents/[type]
@@ -24,7 +41,7 @@ interface RouteContext {
  */
 export const GET = withErrorHandler<AgentConfiguration>(
   async (req: NextRequest, context: RouteContext) => {
-    const { type } = await context.params;
+    const { type } = context.params;
     
     return handleAsyncOperation(
       () => agentService.getAgentByType(type)
@@ -38,14 +55,27 @@ export const GET = withErrorHandler<AgentConfiguration>(
  */
 export const PUT = withErrorHandler<AgentConfiguration>(
   async (req: NextRequest, context: RouteContext) => {
-    const { type } = await context.params;
+    const { type } = context.params;
     const body = await req.json();
     const validatedData = validateRequestBody(body, UpdateAgentConfigSchema);
     
-    // Convert config object to JSON string if provided
+    // Normalize config to a single JSON string deterministically
+    let normalizedConfig: string | undefined;
+    if (typeof validatedData.config === 'string') {
+      normalizedConfig = validatedData.config;
+    } else if (validatedData.config !== undefined) {
+      normalizedConfig = JSON.stringify(validatedData.config);
+    } else if (body.config !== undefined && typeof body.config !== 'string') {
+      normalizedConfig = JSON.stringify(body.config);
+    } else if (typeof body.config === 'string') {
+      normalizedConfig = body.config;
+    } else {
+      normalizedConfig = undefined;
+    }
+    
     const updateData = {
       ...validatedData,
-      config: validatedData.config || (body.config ? JSON.stringify(body.config) : undefined)
+      config: normalizedConfig
     };
     
     return handleAsyncOperation(
@@ -60,9 +90,9 @@ export const PUT = withErrorHandler<AgentConfiguration>(
  */
 export const DELETE = withErrorHandler<void>(
   async (req: NextRequest, context: RouteContext) => {
-    const { type } = await context.params;
+    const { type } = context.params;
     const searchParams = req.nextUrl.searchParams;
-    const force = searchParams.get('force') === 'true';
+    const { force } = validateQueryParams(searchParams, DeleteQuerySchema);
     
     return handleAsyncOperation(
       () => agentService.deleteAgentConfiguration(type, force)
@@ -76,11 +106,7 @@ export const DELETE = withErrorHandler<void>(
  */
 export const PATCH = withErrorHandler<AgentConfiguration>(
   async (req: NextRequest, context: RouteContext) => {
-    const { type } = await context.params;
-    
-    const EnabledToggleSchema = z.object({
-      enabled: z.boolean()
-    });
+    const { type } = context.params;
     
     const body = await req.json();
     const { enabled } = validateRequestBody(body, EnabledToggleSchema);

@@ -6,11 +6,18 @@ import {
 import { executionService } from '@/lib/services/executionService';
 import type { ExecutionStats } from '@/lib/types/database';
 
+interface ExecutionTrends {
+  totalChange: number;
+  completionRateChange: number;
+  averageDurationChange: number;
+  costChange: number;
+}
+
 /**
  * GET /api/executions/stats
  * Get execution statistics with trends
  */
-export const GET = withErrorHandler<ExecutionStats & { trends?: any }>(
+export const GET = withErrorHandler<ExecutionStats & { trends?: ExecutionTrends }>(
   async (req: NextRequest) => {
     const searchParams = req.nextUrl.searchParams;
     const includeTrends = searchParams.get('includeTrends') !== 'false'; // default to true

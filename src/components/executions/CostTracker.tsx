@@ -251,7 +251,10 @@ export default function CostTracker({
                 <div className="text-xs text-gray-500 mb-1">Today's Total</div>
                 <div className="text-sm font-medium">{formatCurrency(dailyCost)}</div>
                 <div className="text-xs text-gray-500 mt-1">
-                  +{((cost.current / dailyCost) * 100).toFixed(1)}%
+                  +{(() => {
+                    const guardedPercent = dailyCost === 0 ? 0 : (cost.current / dailyCost) * 100;
+                    return isFinite(guardedPercent) ? guardedPercent.toFixed(1) : '0.0';
+                  })()}%
                 </div>
               </div>
               
@@ -259,7 +262,10 @@ export default function CostTracker({
                 <div className="text-xs text-gray-500 mb-1">This Month</div>
                 <div className="text-sm font-medium">{formatCurrency(monthlyCost)}</div>
                 <div className="text-xs text-gray-500 mt-1">
-                  +{((cost.current / monthlyCost) * 100).toFixed(1)}%
+                  +{(() => {
+                    const guardedPercent = monthlyCost === 0 ? 0 : (cost.current / monthlyCost) * 100;
+                    return isFinite(guardedPercent) ? guardedPercent.toFixed(1) : '0.0';
+                  })()}%
                 </div>
               </div>
             </div>
@@ -277,7 +283,7 @@ export default function CostTracker({
                 Cost per token:
               </span>
               <span className="font-mono">
-                {cost.tokenUsage 
+                {cost.tokenUsage && (cost.tokenUsage.inputTokens + cost.tokenUsage.outputTokens) > 0
                   ? formatCurrency(cost.current / (cost.tokenUsage.inputTokens + cost.tokenUsage.outputTokens))
                   : 'N/A'
                 }

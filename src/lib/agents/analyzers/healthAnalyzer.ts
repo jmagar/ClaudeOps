@@ -11,14 +11,13 @@ import {
   DockerCollectorResult,
   ServiceCollectorResult
 } from '../../types/agent';
+import { spawn } from 'child_process';
 
 /**
  * Health analysis engine for intelligent system analysis
  */
 export class HealthAnalyzer {
-  constructor() {
-    // Future: Initialize with Claude SDK when available
-  }
+  constructor() {}
 
   /**
    * Perform comprehensive health analysis using AI
@@ -52,7 +51,11 @@ export class HealthAnalyzer {
         ai_analysis: aiAnalysis,
         critical_issues: criticalIssues,
         warnings: this.identifyWarnings(input),
-        recommendations: aiAnalysis.recommendations
+        recommendations: aiAnalysis.recommendations,
+        cost: aiAnalysis.cost || 0,
+        usage: aiAnalysis.usage || { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 },
+        model_used: aiAnalysis.model_used || 'claude-3-5-sonnet-20241022',
+        duration: aiAnalysis.duration || 0
       };
     } catch (error) {
       logs.push(`[${new Date().toISOString()}] Health analysis error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -267,15 +270,101 @@ export class HealthAnalyzer {
     logs: string[]
   ): Promise<AIAnalysis> {
     try {
-      logs.push(`[${new Date().toISOString()}] Generating analysis with depth: ${context.options.ai_analysis_depth}`);
+      logs.push(`[${new Date().toISOString()}] Generating AI analysis with depth: ${context.options.ai_analysis_depth}`);
 
-      // For now, use rule-based analysis
-      // Future: Integrate with Claude SDK for AI-powered insights
-      return this.createRuleBasedAnalysis(input);
+      // Use Claude CLI for real AI analysis
+      const analysisPrompt = this.buildAnalysisPrompt(input, context);
+      const systemPrompt = this.getAnalysisSystemPrompt();
+      
+      logs.push(`[${new Date().toISOString()}] Calling Claude CLI for analysis...`);
+      
+      const result = await this.callClaudeCLI(analysisPrompt, systemPrompt);
+      const { response, cost, usage, model } = result;
+      
+      logs.push(`[${new Date().toISOString()}] AI analysis completed. Cost: $${cost}, Model: ${model}`);
+
+      // Parse the AI response
+      try {
+        const aiResult = JSON.parse(response);
+        const parsedAnalysis = this.parseAIAnalysisResult(aiResult, input);
+        return {
+          ...parsedAnalysis,
+          cost,
+          usage,
+          model_used: model,
+          duration: 0
+        };
+      } catch (parseError) {
+        logs.push(`[${new Date().toISOString()}] Failed to parse AI response as JSON, using text analysis`);
+        const parsedAnalysis = this.parseTextAnalysisResult(response, input);
+        return {
+          ...parsedAnalysis,
+          cost,
+          usage,
+          model_used: model,
+          duration: 0
+        };
+      }
+
     } catch (error) {
-      logs.push(`[${new Date().toISOString()}] Analysis error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return this.createFallbackAnalysis(input);
+      logs.push(`[${new Date().toISOString()}] AI analysis error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      logs.push(`[${new Date().toISOString()}] Falling back to rule-based analysis`);
+      return this.createRuleBasedAnalysis(input);
     }
+  }
+
+  private async callClaudeCLI(prompt: string, systemPrompt: string): Promise<{
+    response: string;
+    cost: number;
+    usage: any;
+    model: string;
+  }> {
+    return new Promise((resolve, reject) => {
+      const claude = spawn('claude', [
+        '--print',
+        '--output-format', 'json',
+        '--custom-system-prompt', systemPrompt
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      claude.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      claude.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      claude.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+          return;
+        }
+
+        try {
+          const result = JSON.parse(stdout);
+          resolve({
+            response: result.result || '',
+            cost: result.total_cost_usd || 0,
+            usage: result.usage || { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            model: 'claude-3-5-sonnet-20241022'
+          });
+        } catch (error) {
+          resolve({
+            response: stdout,
+            cost: 0,
+            usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            model: 'claude-3-5-sonnet-20241022'
+          });
+        }
+      });
+
+      // Send the prompt to stdin
+      claude.stdin.write(prompt);
+      claude.stdin.end();
+    });
   }
 
   private buildAnalysisPrompt(input: HealthAnalysisInput, context: AgentExecutionContext): string {

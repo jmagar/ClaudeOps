@@ -23,7 +23,11 @@ log() {
     local level="$1"
     shift
     local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Ensure log directory exists
+    mkdir -p "$(dirname "$LOG_FILE")"
     
     case "$level" in
         INFO)
@@ -61,7 +65,8 @@ check_database_exists() {
 
 # Perform database backup
 perform_backup() {
-    local timestamp=$(date '+%Y%m%d_%H%M%S')
+    local timestamp
+    timestamp=$(date '+%Y%m%d_%H%M%S')
     local db_path="$DATA_PATH/$DB_FILE"
     local backup_file="$BACKUP_PATH/${DB_FILE%.db}_${timestamp}.db"
     local backup_compressed="$backup_file.gz"
@@ -69,8 +74,10 @@ perform_backup() {
     log INFO "Starting backup: $db_path -> $backup_compressed"
     
     # Check database integrity first
-    if ! sqlite3 "$db_path" "PRAGMA integrity_check;" >/dev/null 2>&1; then
-        log ERROR "Database integrity check failed for: $db_path"
+    local integrity_result
+    integrity_result=$(sqlite3 "$db_path" "PRAGMA integrity_check;" 2>/dev/null | tr -d '\n\r')
+    if [ "$integrity_result" != "ok" ]; then
+        log ERROR "Database integrity check failed for: $db_path - $integrity_result"
         return 1
     fi
     
@@ -87,7 +94,8 @@ perform_backup() {
                 log INFO "Backup integrity verified: $backup_compressed"
                 
                 # Calculate and log backup size
-                local backup_size=$(stat -f%z "$backup_compressed" 2>/dev/null || stat -c%s "$backup_compressed")
+                local backup_size
+                backup_size=$(stat -f%z "$backup_compressed" 2>/dev/null || stat -c%s "$backup_compressed")
                 log INFO "Backup size: $(numfmt --to=iec-i --suffix=B --format=%.1f "$backup_size")"
                 
                 return 0
@@ -117,16 +125,18 @@ cleanup_old_backups() {
     # Find and delete old backup files
     while IFS= read -r -d '' file; do
         if [ -f "$file" ]; then
-            local file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+            local file_size
+            file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
             rm -f "$file"
             deleted_count=$((deleted_count + 1))
             total_size_freed=$((total_size_freed + file_size))
             log INFO "Deleted old backup: $(basename "$file")"
         fi
-    done < <(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f -mtime +$RETENTION_DAYS -print0 2>/dev/null)
+    done < <(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f -mtime "+$RETENTION_DAYS" -print0 2>/dev/null)
     
     if [ $deleted_count -gt 0 ]; then
-        local size_freed_human=$(numfmt --to=iec-i --suffix=B --format=%.1f "$total_size_freed")
+        local size_freed_human
+        size_freed_human=$(numfmt --to=iec-i --suffix=B --format=%.1f "$total_size_freed")
         log INFO "Cleanup completed: deleted $deleted_count files, freed $size_freed_human"
     else
         log INFO "Cleanup completed: no old backups found"
@@ -135,18 +145,21 @@ cleanup_old_backups() {
 
 # Generate backup report
 generate_backup_report() {
-    local backup_count=$(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f | wc -l)
+    local backup_count
+    backup_count=$(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f -print0 2>/dev/null | tr -cd '\0' | wc -c)
     local total_size=0
     
     # Calculate total backup size
-    while IFS= read -r file; do
+    while IFS= read -r -d '' file; do
         if [ -f "$file" ]; then
-            local file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+            local file_size
+            file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
             total_size=$((total_size + file_size))
         fi
-    done < <(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f)
+    done < <(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f -print0 2>/dev/null)
     
-    local total_size_human=$(numfmt --to=iec-i --suffix=B --format=%.1f "$total_size")
+    local total_size_human
+    total_size_human=$(numfmt --to=iec-i --suffix=B --format=%.1f "$total_size")
     
     log INFO "Backup Report:"
     log INFO "  - Total backups: $backup_count"
@@ -166,7 +179,8 @@ health_check() {
     fi
     
     # Check disk space
-    local available_space=$(df "$BACKUP_PATH" | tail -1 | awk '{print $4}')
+    local available_space
+    available_space=$(df -kP "$BACKUP_PATH" | tail -1 | awk '{print $4}')
     local required_space=1048576  # 1GB in KB
     
     if [ "$available_space" -lt "$required_space" ]; then
@@ -187,7 +201,8 @@ trap cleanup_on_exit SIGINT SIGTERM
 
 # Main execution
 main() {
-    local start_time=$(date '+%s')
+    local start_time
+    start_time=$(date '+%s')
     
     log INFO "ClaudeOps backup script starting..."
     log INFO "Configuration:"
@@ -234,7 +249,8 @@ main() {
     # Generate report
     generate_backup_report
     
-    local end_time=$(date '+%s')
+    local end_time
+    end_time=$(date '+%s')
     local duration=$((end_time - start_time))
     
     log INFO "Backup script completed in ${duration}s"

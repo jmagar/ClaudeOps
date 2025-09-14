@@ -1,5 +1,9 @@
 'use client'
 
+// NOTE: For optimal WebSocket handling, server events should include agentType
+// in execution:progress, execution:completed, and execution:failed messages
+// to avoid the need for client-side executionId → agentType mapping
+
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -72,14 +76,26 @@ interface ExecutionProgress {
 export function QuickActions() {
   const [executions, setExecutions] = useState<Record<string, ExecutionProgress>>({})
   const [lastExecution, setLastExecution] = useState<{ type: string; timestamp: number } | null>(null)
+  // Map from executionId to agentType to resolve the hard-coded issue
+  const [executionToAgentMap, setExecutionToAgentMap] = useState<Map<string, string>>(new Map())
 
   const { isConnected, sendMessage, subscribeToExecution } = useWebSocket({
     onMessage: (message) => {
-      if (message.type === 'execution:progress') {
+      if (message.type === 'execution:started') {
+        // Store the mapping when execution starts
+        const { executionId, agentType } = message
+        if (executionId && agentType) {
+          setExecutionToAgentMap(prev => new Map(prev.set(executionId, agentType)))
+        }
+      } else if (message.type === 'execution:progress') {
         const { executionId, progress, step } = message
-        // Note: We need agentType from somewhere - might need to be added to the message
-        // For now, let's extract it from executionId or store it differently
-        const agentType = 'system-health' // TODO: get from message or store mapping
+        // Look up agentType from our mapping
+        const agentType = executionToAgentMap.get(executionId)
+        if (!agentType) {
+          console.warn('No agentType found for executionId:', executionId)
+          return // Ignore messages without proper mapping
+        }
+        
         setExecutions(prev => ({
           ...prev,
           [agentType]: {
@@ -91,7 +107,14 @@ export function QuickActions() {
           }
         }))
       } else if (message.type === 'execution:completed' || message.type === 'execution:failed') {
-        const agentType = 'system-health' // TODO: get from message or store mapping
+        const { executionId } = message
+        // Look up agentType from our mapping
+        const agentType = executionToAgentMap.get(executionId)
+        if (!agentType) {
+          console.warn('No agentType found for executionId:', executionId)
+          return // Ignore messages without proper mapping
+        }
+        
         const status = message.type === 'execution:completed' ? 'completed' : 'failed'
         setExecutions(prev => ({
           ...prev,
@@ -102,11 +125,16 @@ export function QuickActions() {
           }
         }))
         
-        // Clear execution status after 5 seconds
+        // Clear execution status after 5 seconds and clean up mapping
         setTimeout(() => {
           setExecutions(prev => {
             const updated = { ...prev }
             delete updated[agentType]
+            return updated
+          })
+          setExecutionToAgentMap(prev => {
+            const updated = new Map(prev)
+            updated.delete(executionId)
             return updated
           })
         }, 5000)
@@ -145,6 +173,8 @@ export function QuickActions() {
 
       const executionId = result.data?.id
       if (executionId) {
+        // Store the mapping for this execution
+        setExecutionToAgentMap(prev => new Map(prev.set(executionId, agentType)))
         // Subscribe to execution updates
         subscribeToExecution(executionId)
         setLastExecution({ type: agentType, timestamp: Date.now() })
@@ -217,11 +247,11 @@ export function QuickActions() {
                   {currentStep}
                 </p>
               )}
-              {progress && (
+              {progress !== undefined && (
                 <div className="w-full bg-muted rounded-full h-1">
                   <div 
                     className="bg-primary rounded-full h-1 transition-all duration-500"
-                    style={{ width: `${progress}%` }}
+                    style={{ width: `${Math.min(100, Math.max(0, Number(progress) || 0))}%` }}
                   ></div>
                 </div>
               )}

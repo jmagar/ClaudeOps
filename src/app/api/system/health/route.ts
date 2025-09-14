@@ -1,3 +1,7 @@
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
+
 import { NextRequest } from 'next/server';
 import { 
   withErrorHandler, 
@@ -24,7 +28,6 @@ export const GET = withErrorHandler<HealthCheckResponse>(
     const searchParams = req.nextUrl.searchParams;
     const options = validateQueryParams(searchParams, HealthCheckQuerySchema);
     
-    const startTime = Date.now();
     const checks: HealthCheckResponse['checks'] = {
       database: { status: 'down' },
       fileSystem: { status: 'down' },
@@ -40,7 +43,7 @@ export const GET = withErrorHandler<HealthCheckResponse>(
       try {
         const dbStart = Date.now();
         // Simple test query using SQL template
-        await db.run(sql`SELECT 1 as test`);
+        await db.execute(sql`SELECT 1 as test`);
         const dbTime = Date.now() - dbStart;
         
         checks.database = {
@@ -63,7 +66,9 @@ export const GET = withErrorHandler<HealthCheckResponse>(
         await fs.access(dataPath);
         
         const stats = await fs.stat(dataPath);
-        const diskStats = await fs.statfs?.(dataPath).catch(() => null);
+        const diskStats = typeof fs.statfs === 'function' 
+          ? await fs.statfs(dataPath).catch(() => null)
+          : null;
         
         checks.fileSystem = {
           status: 'up',

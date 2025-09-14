@@ -79,19 +79,46 @@ export function CostCharts() {
   const [trendData, setTrendData] = useState<CostTrendData[]>([]);
   const [agentData, setAgentData] = useState<AgentCostData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [trendError, setTrendError] = useState<string | null>(null);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const [period, setPeriod] = useState<PeriodType>('day');
   const [chartType, setChartType] = useState<ChartType>('area');
   const [days, setDays] = useState(30);
 
   useEffect(() => {
-    fetchTrendData();
-    fetchAgentData();
+    const controller = new AbortController();
+    const signal = controller.signal;
+    
+    const loadData = async () => {
+      setLoading(true);
+      setTrendError(null);
+      setAgentError(null);
+      
+      try {
+        await Promise.all([
+          fetchTrendData(signal),
+          fetchAgentData(signal)
+        ]);
+      } catch (err) {
+        // Individual fetch functions handle their own errors
+        console.error('Error in data loading:', err);
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      controller.abort();
+    };
   }, [period, days]);
 
-  const fetchTrendData = async () => {
+  const fetchTrendData = async (signal: AbortSignal) => {
     try {
-      const response = await fetch(`/api/costs/trends?period=${period}&days=${days}`);
+      const response = await fetch(`/api/costs/trends?period=${period}&days=${days}`, { signal });
       if (!response.ok) {
         throw new Error(`Failed to fetch trend data: ${response.statusText}`);
       }
@@ -101,17 +128,24 @@ export function CostCharts() {
         throw new Error(result.error || 'Failed to fetch trend data');
       }
       
-      setTrendData(result.data);
+      if (!signal.aborted) {
+        setTrendData(result.data);
+        setTrendError(null);
+      }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return; // Don't set error state for aborted requests
+      }
       console.error('Error fetching trend data:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      if (!signal.aborted) {
+        setTrendError(err instanceof Error ? err.message : 'Unknown error');
+      }
     }
   };
 
-  const fetchAgentData = async () => {
+  const fetchAgentData = async (signal: AbortSignal) => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/costs/breakdown');
+      const response = await fetch('/api/costs/breakdown', { signal });
       if (!response.ok) {
         throw new Error(`Failed to fetch agent data: ${response.statusText}`);
       }
@@ -144,13 +178,18 @@ export function CostCharts() {
         avgCost: agent.totalCost / agent.executionCount,
       }));
 
-      setAgentData(agentDataArray);
-      setError(null);
+      if (!signal.aborted) {
+        setAgentData(agentDataArray);
+        setAgentError(null);
+      }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return; // Don't set error state for aborted requests
+      }
       console.error('Error fetching agent data:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
+      if (!signal.aborted) {
+        setAgentError(err instanceof Error ? err.message : 'Unknown error');
+      }
     }
   };
 
@@ -242,19 +281,50 @@ export function CostCharts() {
     );
   }
 
-  if (error) {
-    return (
-      <Alert variant="destructive">
+  // Render individual error alerts for failed charts
+  const hasErrors = trendError || agentError;
+  const errorAlerts = [];
+  
+  if (trendError) {
+    errorAlerts.push(
+      <Alert key="trend-error" variant="destructive">
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          Failed to load chart data: {error}
+          Failed to load trend chart: {trendError}
         </AlertDescription>
       </Alert>
+    );
+  }
+  
+  if (agentError) {
+    errorAlerts.push(
+      <Alert key="agent-error" variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load agent breakdown chart: {agentError}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  
+  // If both charts failed and we're still loading, show errors
+  if (hasErrors && trendError && agentError) {
+    return (
+      <div className="space-y-4">
+        {errorAlerts}
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* Show error alerts at the top */}
+      {errorAlerts.length > 0 && (
+        <div className="space-y-2">
+          {errorAlerts}
+        </div>
+      )}
+      
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="flex gap-2">
           <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
@@ -307,9 +377,20 @@ export function CostCharts() {
             </div>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="aspect-video">
-              {renderTrendChart()}
-            </ChartContainer>
+            {trendError ? (
+              <div className="aspect-video flex items-center justify-center">
+                <Alert variant="destructive" className="max-w-md">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    {trendError}
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : (
+              <ChartContainer config={chartConfig} className="aspect-video">
+                {renderTrendChart()}
+              </ChartContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -326,7 +407,16 @@ export function CostCharts() {
             </div>
           </CardHeader>
           <CardContent>
-            {agentData.length > 0 ? (
+            {agentError ? (
+              <div className="aspect-video flex items-center justify-center">
+                <Alert variant="destructive" className="max-w-md">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    {agentError}
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : agentData.length > 0 ? (
               <ChartContainer config={chartConfig} className="aspect-video">
                 <RechartsPieChart>
                   <ChartTooltip
@@ -339,7 +429,7 @@ export function CostCharts() {
                     cy="50%"
                     outerRadius={80}
                     dataKey="totalCost"
-                    label={({ agentType, percent }: any) => 
+                    label={({ agentType, percent }: { agentType: string; percent: number }) => 
                       `${agentType} (${(percent * 100).toFixed(1)}%)`
                     }
                   >

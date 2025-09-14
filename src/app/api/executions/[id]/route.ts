@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { 
   withErrorHandler, 
   handleAsyncOperation, 
@@ -6,6 +7,7 @@ import {
   validateQueryParams,
   NotFoundError
 } from '@/lib/middleware/errorHandler';
+import { ValidationError } from '@/lib/types/database';
 import { 
   UpdateExecutionSchema,
   ExecutionDetailQuerySchema,
@@ -16,8 +18,13 @@ import { executionService } from '@/lib/services/executionService';
 import type { Execution, ExecutionWithDetails } from '@/lib/types/database';
 
 interface RouteContext {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
+
+// Schema for DELETE query validation
+const DeleteExecutionQuerySchema = z.object({
+  hard: z.coerce.boolean().optional().default(false)
+});
 
 /**
  * GET /api/executions/[id]
@@ -25,7 +32,7 @@ interface RouteContext {
  */
 export const GET = withErrorHandler<Execution | ExecutionWithDetails>(
   async (req: NextRequest, context: RouteContext) => {
-    const { id } = await context.params;
+    const { id } = context.params;
     const searchParams = req.nextUrl.searchParams;
     const queryOptions = validateQueryParams(searchParams, ExecutionDetailQuerySchema);
     
@@ -41,15 +48,17 @@ export const GET = withErrorHandler<Execution | ExecutionWithDetails>(
  */
 export const PUT = withErrorHandler<Execution>(
   async (req: NextRequest, context: RouteContext) => {
-    const { id } = await context.params;
+    const { id } = context.params;
     const body = await req.json();
     const validatedData = validateRequestBody(body, UpdateExecutionSchema);
     
-    // Convert arrays/objects to JSON strings if provided
+    // Handle logs and aiAnalysis: only stringify if they're not already strings
     const updateData = {
       ...validatedData,
-      logs: validatedData.logs || (body.logs ? JSON.stringify(body.logs) : undefined),
-      aiAnalysis: validatedData.aiAnalysis || (body.aiAnalysis ? JSON.stringify(body.aiAnalysis) : undefined)
+      logs: validatedData.logs || (body.logs !== undefined ? 
+        (typeof body.logs === 'string' ? body.logs : JSON.stringify(body.logs)) : undefined),
+      aiAnalysis: validatedData.aiAnalysis || (body.aiAnalysis !== undefined ? 
+        (typeof body.aiAnalysis === 'string' ? body.aiAnalysis : JSON.stringify(body.aiAnalysis)) : undefined)
     };
     
     return handleAsyncOperation(
@@ -64,13 +73,21 @@ export const PUT = withErrorHandler<Execution>(
  */
 export const DELETE = withErrorHandler<void>(
   async (req: NextRequest, context: RouteContext) => {
-    const { id } = await context.params;
+    const { id } = context.params;
     const searchParams = req.nextUrl.searchParams;
-    const hardDelete = searchParams.get('hard') === 'true';
     
-    return handleAsyncOperation(
-      () => executionService.deleteExecution(id, hardDelete)
-    );
+    try {
+      const queryOptions = validateQueryParams(searchParams, DeleteExecutionQuerySchema);
+      const { hard: hardDelete } = queryOptions;
+      
+      return handleAsyncOperation(
+        () => executionService.deleteExecution(id, hardDelete)
+      );
+    } catch (error) {
+      return handleAsyncOperation(
+        () => Promise.reject(new ValidationError('Invalid query parameters', error.message))
+      );
+    }
   }
 );
 

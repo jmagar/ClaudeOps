@@ -267,14 +267,14 @@ export class SystemHealthAgent {
         priority_actions: []
       },
       cost_breakdown: {
-        execution_cost_usd: healthAnalysis.cost || 0.05,
+        execution_cost_usd: healthAnalysis.cost || 0.00,
         tokens_used: healthAnalysis.usage || {
-          input_tokens: 1500,
-          output_tokens: 800,
+          input_tokens: 0,
+          output_tokens: 0,
           cache_creation_tokens: 0,
           cache_read_tokens: 0
         },
-        model_used: 'claude-3-5-sonnet-20241022',
+        model_used: healthAnalysis.model_used || 'claude-3-5-sonnet-20241022',
         execution_duration_ms: healthAnalysis.duration || 0,
         cost_per_minute_usd: 0.001
       }

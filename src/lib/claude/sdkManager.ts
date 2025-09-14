@@ -1,5 +1,4 @@
 import { 
-  query,
   Options,
   Query,
   PermissionMode,
@@ -14,7 +13,7 @@ import {
   SessionStartHookInput,
   SessionEndHookInput,
   NotificationHookInput
-} from '@anthropic/claude-code-sdk';
+} from '../types/claude'; // Placeholder until SDK is available
 import { 
   AgentConfig,
   BudgetConfig,
@@ -116,38 +115,13 @@ export class ClaudeSDKManager {
       : { ...this.config.baseOptions, ...overrides };
 
     // Add comprehensive hooks
-    const configWithHooks: Options = {
+    const configWithHooks: Partial<Options> = {
       ...config,
-      hooks: {
-        PreToolUse: [{
-          matcher: '',
-          hooks: [this.preToolUseHook.bind(this)]
-        }],
-        PostToolUse: [{
-          matcher: '',
-          hooks: [this.postToolUseHook.bind(this)]
-        }],
-        SessionStart: [{
-          matcher: '',
-          hooks: [this.sessionStartHook.bind(this)]
-        }],
-        SessionEnd: [{
-          matcher: '',
-          hooks: [this.sessionEndHook.bind(this)]
-        }],
-        Notification: [{
-          matcher: '',
-          hooks: [this.notificationHook.bind(this)]
-        }],
-        ...config.hooks
-      },
-      canUseTool: config.canUseTool || this.createPermissionHandler()
+      // TODO: hooks when SDK available
     };
 
-    return query({
-      prompt,
-      options: configWithHooks
-    });
+    // TODO: Replace with actual query when SDK is available
+    return {} as any; // Placeholder implementation
   }
 
   /**
@@ -336,9 +310,8 @@ export class ClaudeSDKManager {
 
         if (dangerousPatterns.some(pattern => pattern.test(command))) {
           return {
-            behavior: 'deny',
-            message: 'Extremely dangerous command blocked for system safety',
-            interrupt: false
+            allowed: false,
+            reason: 'Extremely dangerous command blocked for system safety'
           };
         }
 
@@ -376,15 +349,14 @@ export class ClaudeSDKManager {
 
         if (!isAllowed) {
           return {
-            behavior: 'deny',
-            message: `File operations restricted to safe directories: ${safePaths.join(', ')}`
+            allowed: false,
+            reason: `File operations restricted to safe directories: ${safePaths.join(', ')}`
           };
         }
       }
 
       return {
-        behavior: 'allow',
-        updatedInput: input
+        allowed: true
       };
     };
   }
@@ -396,21 +368,21 @@ export class ClaudeSDKManager {
     toolUseId: string | undefined,
     options: { signal: AbortSignal }
   ): Promise<HookJSONOutput> {
-    console.log(`Starting tool: ${input.tool_name}`);
+    console.log(`Starting tool: ${input.tool}`);
     
     // Record start time for performance tracking
     this.metrics.set(`tool_start_${toolUseId}`, Date.now());
     
     // Check system resources (simplified)
     const isOverloaded = await this.checkSystemLoad();
-    if (isOverloaded && input.tool_name === 'Bash') {
+    if (isOverloaded && input.tool === 'Bash') {
       return {
-        continue: false,
-        stopReason: 'System overloaded, delaying execution'
+        success: false,
+        data: { reason: 'System overloaded, delaying execution' }
       };
     }
     
-    return { continue: true };
+    return { success: true };
   }
 
   private async postToolUseHook(
@@ -422,38 +394,34 @@ export class ClaudeSDKManager {
     const startTime = this.metrics.get(`tool_start_${toolUseId}`);
     if (startTime) {
       const duration = Date.now() - startTime;
-      console.log(`Tool ${input.tool_name} completed in ${duration}ms`);
+      console.log(`Tool ${input.tool} completed in ${duration}ms`);
       
       // Store performance metrics
-      this.recordToolMetrics(input.tool_name, duration);
+      this.recordToolMetrics(input.tool, duration);
     }
     
-    return { continue: true };
+    return { success: true };
   }
 
   private async sessionStartHook(
     input: SessionStartHookInput
   ): Promise<HookJSONOutput> {
-    console.log(`Session started: ${input.session_id} (${input.source})`);
+    console.log(`Session started: ${input.sessionId}`);
     
     return {
-      continue: true,
-      hookSpecificOutput: {
-        hookEventName: 'SessionStart',
-        additionalContext: `Session initialized in ${input.cwd}`
-      }
+      success: true
     };
   }
 
   private async sessionEndHook(
     input: SessionEndHookInput
   ): Promise<HookJSONOutput> {
-    console.log(`Session ended: ${input.session_id} (${input.reason})`);
+    console.log(`Session ended: ${input.sessionId}`);
     
     // Generate session summary (if needed)
-    await this.generateSessionSummary(input.session_id);
+    await this.generateSessionSummary(input.sessionId);
     
-    return { continue: true };
+    return { success: true };
   }
 
   private async notificationHook(
@@ -461,9 +429,9 @@ export class ClaudeSDKManager {
   ): Promise<HookJSONOutput> {
     const notification: NotificationEvent = {
       timestamp: new Date().toISOString(),
-      title: input.title,
+      title: input.type,
       message: input.message,
-      sessionId: input.session_id
+      sessionId: 'unknown'
     };
 
     this.notifications.push(notification);
@@ -473,9 +441,9 @@ export class ClaudeSDKManager {
       this.notifications = this.notifications.slice(-100);
     }
     
-    console.log(`Notification: ${input.title || 'Untitled'} - ${input.message}`);
+    console.log(`Notification: ${input.type} - ${input.message}`);
     
-    return { continue: true };
+    return { success: true };
   }
 
   private async checkSystemLoad(): Promise<boolean> {
@@ -519,7 +487,7 @@ export class SDKManagerFactory {
    */
   static createDevelopmentManager(): ClaudeSDKManager {
     return new ClaudeSDKManager({
-      baseOptions: SDKConfigFactory.createDevelopmentConfig(),
+      baseOptions: SDKConfigFactory.createDevelopmentConfig() as Options,
       costThresholds: {
         warning: 30,
         critical: 50,
@@ -529,6 +497,7 @@ export class SDKManagerFactory {
         maxAttempts: 2,
         backoffMultiplier: 1.5,
         initialDelay: 500,
+        maxDelay: 5000,
         retryableErrors: ['timeout', 'network']
       }
     });

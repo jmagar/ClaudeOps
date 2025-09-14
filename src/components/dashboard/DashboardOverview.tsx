@@ -33,6 +33,20 @@ export function DashboardOverview() {
 
         // Fetch recent executions for overview
         const executionsResponse = await fetch('/api/executions?limit=10&sortBy=startedAt&sortOrder=desc')
+        
+        if (!executionsResponse.ok) {
+          let errorMessage = `HTTP ${executionsResponse.status} ${executionsResponse.statusText}`
+          try {
+            const errorBody = await executionsResponse.text()
+            if (errorBody) {
+              errorMessage += `: ${errorBody}`
+            }
+          } catch {
+            // Ignore if we can't read the error body
+          }
+          throw new Error(errorMessage)
+        }
+        
         const executionsData: ApiResponse<PaginationResponse<Execution>> = await executionsResponse.json()
 
         if (!executionsData.success) {
@@ -49,7 +63,7 @@ export function DashboardOverview() {
         const failedExecutions = executions.filter(e => e.status === 'failed').length
         
         const totalCost = executions.reduce((sum, e) => sum + (e.costUsd || 0), 0)
-        const completedExecs = executions.filter(e => e.status === 'completed' && e.durationMs)
+        const completedExecs = executions.filter(e => e.status === 'completed' && e.durationMs != null)
         const averageDuration = completedExecs.length > 0 
           ? completedExecs.reduce((sum, e) => sum + (e.durationMs || 0), 0) / completedExecs.length 
           : 0

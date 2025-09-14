@@ -478,6 +478,13 @@
             "total_cost_usd"
           ],
           "isUnique": false
+        },
+        "cost_request_id_idx": {
+          "name": "cost_request_id_idx",
+          "columns": [
+            "request_id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {

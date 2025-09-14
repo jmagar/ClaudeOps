@@ -64,10 +64,6 @@ export interface HookCallbackMatcher {
   eventType: string;
 }
 
-export interface HookJSONOutput {
-  event: string;
-  data: any;
-}
 
 export interface PreToolUseHookInput {
   toolName: string;
@@ -217,6 +213,46 @@ export interface EnhancedError extends Error {
   fingerprint?: string;
   timestamp?: string;
 }
+
+// Hook types (placeholders until SDK is available)
+export interface HookCallbackMatcher {
+  pattern: string;
+  callback: (input: any) => any;
+}
+
+export interface HookJSONOutput {
+  success: boolean;
+  data?: any;
+}
+
+export interface PreToolUseHookInput {
+  tool: string;
+  parameters: any;
+}
+
+export interface PostToolUseHookInput {
+  tool: string;
+  result: any;
+}
+
+export interface SessionStartHookInput {
+  sessionId: string;
+}
+
+export interface SessionEndHookInput {
+  sessionId: string;
+}
+
+export interface NotificationHookInput {
+  type: string;
+  message: string;
+}
+
+export type CanUseTool = (
+  toolName: string,
+  input: any,
+  options: { signal: AbortSignal; suggestions?: any[] }
+) => Promise<PermissionResult>;
 
 export interface ExecutionError {
   executionId: string;

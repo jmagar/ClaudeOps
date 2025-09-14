@@ -200,7 +200,7 @@ export function CostBreakdown() {
       totalCost,
       totalExecutions: filteredData.length,
       totalTokens,
-      avgCostPerExecution: totalCost / filteredData.length,
+      avgCostPerExecution: filteredData.length > 0 ? totalCost / filteredData.length : 0,
       mostExpensiveExecution: mostExpensive,
       leastExpensiveExecution: leastExpensive,
     });
@@ -224,20 +224,27 @@ export function CostBreakdown() {
   };
 
   const handleExport = () => {
+    const escapeCSVField = (value: any): string => {
+      if (value === null || value === undefined) return '""';
+      const str = String(value);
+      const escaped = str.replace(/"/g, '""');
+      return `"${escaped}"`;
+    };
+
     const csv = [
-      ['Timestamp', 'Execution ID', 'Agent Type', 'Model', 'Cost (USD)', 'Input Tokens', 'Output Tokens', 'Total Tokens', 'Response Time (ms)', 'Cache Hit'].join(','),
+      ['Timestamp', 'Execution ID', 'Agent Type', 'Model', 'Cost (USD)', 'Input Tokens', 'Output Tokens', 'Total Tokens', 'Response Time (ms)', 'Cache Hit'].map(escapeCSVField).join(','),
       ...filteredData.map(item => [
-        item.timestamp,
-        item.executionId,
+        item.timestamp || '',
+        item.executionId || '',
         item.agentType || '',
-        item.modelUsed,
+        item.modelUsed || '',
         item.totalCostUsd?.toFixed(6) || '0',
         item.inputTokens || '0',
         item.outputTokens || '0',
         (item.inputTokens || 0) + (item.outputTokens || 0),
         item.responseTime || '',
         item.cacheHit ? 'Yes' : 'No'
-      ].join(','))
+      ].map(escapeCSVField).join(','))
     ].join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -381,10 +388,11 @@ export function CostBreakdown() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
+              <label htmlFor="cb-search" className="text-sm font-medium">Search</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id="cb-search"
                   placeholder="Search executions..."
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
@@ -394,8 +402,9 @@ export function CostBreakdown() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">From Date</label>
+              <label htmlFor="cb-from" className="text-sm font-medium">From Date</label>
               <Input
+                id="cb-from"
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
@@ -403,8 +412,9 @@ export function CostBreakdown() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">To Date</label>
+              <label htmlFor="cb-to" className="text-sm font-medium">To Date</label>
               <Input
+                id="cb-to"
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) => handleFilterChange('dateTo', e.target.value)}
@@ -412,9 +422,9 @@ export function CostBreakdown() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Agent Type</label>
-              <Select value={filters.agentType} onValueChange={(value) => handleFilterChange('agentType', value)}>
-                <SelectTrigger>
+              <label htmlFor="cb-agent" className="text-sm font-medium">Agent Type</label>
+              <Select name="agentType" value={filters.agentType} onValueChange={(value) => handleFilterChange('agentType', value)}>
+                <SelectTrigger id="cb-agent">
                   <SelectValue placeholder="All agents" />
                 </SelectTrigger>
                 <SelectContent>
@@ -427,9 +437,9 @@ export function CostBreakdown() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Model</label>
-              <Select value={filters.modelUsed} onValueChange={(value) => handleFilterChange('modelUsed', value)}>
-                <SelectTrigger>
+              <label htmlFor="cb-model" className="text-sm font-medium">Model</label>
+              <Select name="model" value={filters.modelUsed} onValueChange={(value) => handleFilterChange('modelUsed', value)}>
+                <SelectTrigger id="cb-model">
                   <SelectValue placeholder="All models" />
                 </SelectTrigger>
                 <SelectContent>
@@ -442,8 +452,8 @@ export function CostBreakdown() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Actions</label>
-              <div className="flex gap-2">
+              <span id="cb-actions-label" className="text-sm font-medium">Actions</span>
+              <div className="flex gap-2" role="group" aria-labelledby="cb-actions-label">
                 <Button variant="outline" size="sm" onClick={handleRefresh}>
                   <RefreshCw className="h-4 w-4" />
                 </Button>
@@ -465,7 +475,7 @@ export function CostBreakdown() {
               Cost Breakdown ({filteredData.length} items)
             </span>
             <Badge variant="outline">
-              Page {currentPage} of {totalPages}
+              {totalPages === 0 ? "No results" : `Page ${currentPage} of ${totalPages}`}
             </Badge>
           </CardTitle>
         </CardHeader>

@@ -33,13 +33,18 @@ export const GET = withErrorHandler<PaginatedResult<Execution>>(
       ...filters
     } = filterParams;
 
+    // Clamp page to at least 1 to prevent negative offset
+    const safePage = Math.max(1, page);
+    
     // Convert page to offset
-    const offset = (page - 1) * limit;
+    const offset = (safePage - 1) * limit;
     
     const executionFilter = {
       ...filters,
       limit,
-      offset
+      offset,
+      sortBy,
+      sortOrder
     };
 
     // Include related data options

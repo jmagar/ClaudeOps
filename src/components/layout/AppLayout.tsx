@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useCallback, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Sidebar } from './Sidebar';
@@ -13,29 +13,48 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, className }: AppLayoutProps) {
   const isMobile = useIsMobile();
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebar-expanded');
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
+  });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const previousExpandedState = useRef<boolean>(true);
 
-  // Auto-collapse sidebar on mobile
+  // Preserve sidebar state across mobile transitions
   useEffect(() => {
     if (isMobile) {
+      // Save current state before collapsing for mobile
+      previousExpandedState.current = sidebarExpanded;
       setSidebarExpanded(false);
+    } else {
+      // Restore previous state when leaving mobile
+      setSidebarExpanded(previousExpandedState.current);
+    }
+  }, [isMobile, sidebarExpanded]);
+
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    if (!isMobile && typeof window !== 'undefined') {
+      localStorage.setItem('sidebar-expanded', JSON.stringify(sidebarExpanded));
+    }
+  }, [sidebarExpanded, isMobile]);
+
+  const handleSidebarToggle = useCallback(() => {
+    if (isMobile) {
+      setMobileSidebarOpen(prev => !prev);
+    } else {
+      setSidebarExpanded((prev: boolean) => !prev);
     }
   }, [isMobile]);
 
-  const handleSidebarToggle = () => {
-    if (isMobile) {
-      setMobileSidebarOpen(!mobileSidebarOpen);
-    } else {
-      setSidebarExpanded(!sidebarExpanded);
-    }
-  };
-
-  const handleMobileSidebarClose = () => {
+  const handleMobileSidebarClose = useCallback(() => {
     if (isMobile) {
       setMobileSidebarOpen(false);
     }
-  };
+  }, [isMobile]);
 
   return (
     <div className={cn('min-h-screen bg-background flex', className)}>

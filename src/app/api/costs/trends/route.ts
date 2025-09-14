@@ -4,14 +4,9 @@ import {
   handleAsyncOperation, 
   validateQueryParams
 } from '@/lib/middleware/errorHandler';
+import { CostTrendsQuerySchema } from '@/lib/middleware/validation';
 import { costService } from '@/lib/services/costService';
-import { z } from 'zod';
 import type { CostTrendData } from '@/lib/types/database';
-
-const CostTrendsQuerySchema = z.object({
-  period: z.enum(['day', 'week', 'month']).optional().default('day'),
-  days: z.coerce.number().min(1).max(365).optional().default(30),
-});
 
 /**
  * GET /api/costs/trends

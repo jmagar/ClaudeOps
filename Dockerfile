@@ -21,7 +21,7 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install dependencies
-RUN npm ci --only=production --ignore-scripts && \
+RUN npm ci --omit=dev --ignore-scripts && \
     npm cache clean --force
 
 # Stage 2: Build stage
@@ -61,12 +61,35 @@ COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
 COPY --from=build --chown=nextjs:nodejs /app/drizzle.config.ts ./
 
 # Copy server configuration
-COPY --from=build --chown=nextjs:nodejs /app/server.js ./
+COPY --from=build --chown=nextjs:nodejs /app/server.ts ./
 COPY --from=build --chown=nextjs:nodejs /app/package.json ./
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/logs /app/temp/agents /app/backups && \
-    chown -R nextjs:nodejs /app/data /app/logs /app/temp /app/backups
+    chown -R nextjs:nodejs /app/data /app/logs /app/temp /app/temp/agents /app/backups
+
+# Create lightweight runtime migration script (avoids needing drizzle-kit in prod)
+RUN cat > /app/runtime-migrate.js <<'EOF'
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+
+const dbPath = '/app/data/production.db';
+const migrationsFolder = '/app/drizzle';
+
+const sqlite = new Database(dbPath);
+const db = drizzle(sqlite);
+
+(async () => {
+  console.log('[migrate] Applying migrations from', migrationsFolder);
+  await migrate(db, { migrationsFolder });
+  console.log('[migrate] Done');
+  sqlite.close();
+})().catch(err => {
+  console.error('[migrate] Failed:', err);
+  process.exit(1);
+});
+EOF
 
 # Create startup script
 RUN cat > /app/start.sh << 'EOF'
@@ -78,15 +101,14 @@ echo "Starting ClaudeOps..."
 # Ensure directories exist
 mkdir -p /app/data /app/logs /app/temp/agents /app/backups
 
-# Run database migrations if needed
-if [ ! -f /app/data/production.db ]; then
-    echo "Initializing database..."
-    npm run db:migrate
-fi
+# Enforce ownership (handles mounted volumes)
+chown -R nextjs:nodejs /app/data /app/logs /app/temp /app/temp/agents /app/backups || true
 
-# Start the application
+echo "Running database migrations (idempotent)..."
+node /app/runtime-migrate.js
+
 echo "Starting server..."
-exec node server.js
+exec npx tsx server.ts
 EOF
 
 RUN chmod +x /app/start.sh && chown nextjs:nodejs /app/start.sh
@@ -97,7 +119,7 @@ ENV HOSTNAME="0.0.0.0"
 ENV PORT=3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
     CMD curl -f http://localhost:3000/api/system/health || exit 1
 
 # Switch to non-root user

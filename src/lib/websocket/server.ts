@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
-import { ConnectionManager } from './connectionManager.js';
+import { ConnectionManager } from './connectionManager';
 import { 
   ServerMessage, 
   createMessage,
@@ -11,7 +11,7 @@ import {
   ExecutionProgressMessage,
   CostUpdatedMessage,
   SystemStatusMessage
-} from './messageTypes.js';
+} from './messageTypes';
 
 export class WebSocketManager {
   private connectionManager: ConnectionManager;

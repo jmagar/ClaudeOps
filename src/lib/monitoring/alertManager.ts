@@ -16,7 +16,7 @@ export interface Alert {
   acknowledged: boolean;
   resolved: boolean;
   resolvedAt?: string;
-  acknowledgdAt?: string;
+  acknowledgedAt?: string;
   metadata?: Record<string, any>;
 }
 
@@ -204,7 +204,7 @@ export class AlertManager extends EventEmitter {
     }
 
     alert.acknowledged = true;
-    alert.acknowledgdAt = new Date().toISOString();
+    alert.acknowledgedAt = new Date().toISOString();
     
     if (acknowledgedBy) {
       alert.metadata = { ...alert.metadata, acknowledgedBy };

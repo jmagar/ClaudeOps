@@ -6,9 +6,9 @@ import {
   createMessage,
   getMessagePriority,
   isValidClientMessage 
-} from './messageTypes.js';
-import { RateLimiter } from './rateLimiter.js';
-import { BackpressureHandler } from './backpressureHandler.js';
+} from './messageTypes';
+import { RateLimiter } from './rateLimiter';
+import { BackpressureHandler } from './backpressureHandler';
 
 interface ConnectedClient {
   id: string;

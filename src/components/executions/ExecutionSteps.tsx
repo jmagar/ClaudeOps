@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { CheckCircle, Clock, XCircle, AlertCircle, PlayCircle, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -119,18 +119,43 @@ function getStepIcon(status: ExecutionStep['status'], isActive = false) {
   }
 }
 
+// Centralized status-to-style mapping
+const statusStyleMap = {
+  completed: {
+    badgeVariant: 'secondary' as const,
+    progressColor: 'bg-green-500',
+    iconColor: 'text-green-500'
+  },
+  running: {
+    badgeVariant: 'default' as const,
+    progressColor: 'bg-blue-500', 
+    iconColor: 'text-blue-500'
+  },
+  failed: {
+    badgeVariant: 'destructive' as const,
+    progressColor: 'bg-red-500',
+    iconColor: 'text-red-500'
+  },
+  skipped: {
+    badgeVariant: 'outline' as const,
+    progressColor: 'bg-yellow-500',
+    iconColor: 'text-yellow-500'
+  },
+  pending: {
+    badgeVariant: 'outline' as const,
+    progressColor: 'bg-gray-400',
+    iconColor: 'text-gray-400'
+  }
+} as const;
+
 // Get status badge variant
 function getStatusBadgeVariant(status: ExecutionStep['status']): 'default' | 'destructive' | 'outline' | 'secondary' {
-  switch (status) {
-    case 'completed':
-      return 'secondary';
-    case 'running':
-      return 'default';
-    case 'failed':
-      return 'destructive';
-    default:
-      return 'outline';
-  }
+  return statusStyleMap[status]?.badgeVariant || statusStyleMap.pending.badgeVariant;
+}
+
+// Get status progress color
+function getStatusProgressColor(status: ExecutionStep['status']): string {
+  return statusStyleMap[status]?.progressColor || statusStyleMap.pending.progressColor;
 }
 
 // Format duration
@@ -154,7 +179,8 @@ function formatDuration(ms: number): string {
 function getSimulatedSteps(
   agentType: string = 'system-health', 
   executionStatus: string, 
-  progress: number = 0
+  progress: number = 0,
+  getStableDuration: (stepId: string, min?: number, max?: number) => number
 ): ExecutionStep[] {
   const baseSteps = defaultStepDefinitions[agentType] || defaultStepDefinitions['system-health'];
   const steps = baseSteps.map(step => ({ ...step })); // Deep copy
@@ -173,7 +199,7 @@ function getSimulatedSteps(
   for (let i = 0; i < completedSteps && i < totalSteps; i++) {
     steps[i].status = 'completed';
     steps[i].completedAt = new Date(Date.now() - (totalSteps - i) * 10000).toISOString();
-    steps[i].duration = Math.random() * 30000 + 5000; // Random duration between 5-35 seconds
+    steps[i].duration = getStableDuration(steps[i].id, 5000, 35000);
   }
   
   // Handle current step based on execution status
@@ -186,7 +212,7 @@ function getSimulatedSteps(
       if (step.status !== 'completed') {
         step.status = 'completed';
         step.completedAt = new Date(Date.now() - (totalSteps - index) * 8000).toISOString();
-        step.duration = Math.random() * 25000 + 3000;
+        step.duration = getStableDuration(step.id, 3000, 28000);
       }
     });
   } else if (executionStatus === 'failed') {
@@ -215,6 +241,18 @@ export default function ExecutionSteps({
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [currentTime, setCurrentTime] = useState(Date.now());
   
+  // Stable durations map to prevent re-randomization on re-renders
+  const durationsMapRef = useRef<Map<string, number>>(new Map());
+  
+  // Helper to get or create stable duration for a step
+  const getStableDuration = (stepId: string, minMs: number = 3000, maxMs: number = 35000): number => {
+    const key = `${executionId}-${stepId}`;
+    if (!durationsMapRef.current.has(key)) {
+      durationsMapRef.current.set(key, Math.random() * (maxMs - minMs) + minMs);
+    }
+    return durationsMapRef.current.get(key)!;
+  };
+  
   // Update current time every second for running step duration
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -230,9 +268,9 @@ export default function ExecutionSteps({
   
   // Generate/update steps based on execution status and progress
   useEffect(() => {
-    const simulatedSteps = getSimulatedSteps(agentType, status, progress);
+    const simulatedSteps = getSimulatedSteps(agentType, status, progress, getStableDuration);
     setSteps(simulatedSteps);
-  }, [agentType, status, progress]);
+  }, [agentType, status, progress, getStableDuration]);
   
   // Calculate overall statistics
   const stepStats = useMemo(() => {
@@ -295,8 +333,7 @@ export default function ExecutionSteps({
         <Progress 
           value={progress} 
           className="h-2"
-          // Add color based on status
-          // className={`h-2 ${status === 'failed' ? 'progress-error' : status === 'completed' ? 'progress-success' : ''}`}
+          indicatorClassName={getStatusProgressColor(status as ExecutionStep['status'])}
         />
         <div className="flex justify-between text-xs text-gray-500 mt-1">
           <span>0%</span>

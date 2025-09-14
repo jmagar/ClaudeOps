@@ -1,0 +1,20 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/costs/route": "app/api/costs/route.js",
+  "/api/costs/summary/alerts/route": "app/api/costs/summary/alerts/route.js",
+  "/api/agents/[type]/route": "app/api/agents/[type]/route.js",
+  "/api/agents/route": "app/api/agents/route.js",
+  "/api/costs/breakdown/route": "app/api/costs/breakdown/route.js",
+  "/api/executions/[id]/route": "app/api/executions/[id]/route.js",
+  "/api/costs/summary/route": "app/api/costs/summary/route.js",
+  "/api/costs/trends/route": "app/api/costs/trends/route.js",
+  "/api/executions/stats/route": "app/api/executions/stats/route.js",
+  "/api/executions/[id]/cancel/route": "app/api/executions/[id]/cancel/route.js",
+  "/api/system/health/route": "app/api/system/health/route.js",
+  "/api/executions/route": "app/api/executions/route.js",
+  "/api/system/metrics/route": "app/api/system/metrics/route.js",
+  "/executions/[id]/page": "app/executions/[id]/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/costs/page": "app/costs/page.js",
+  "/page": "app/page.js"
+}

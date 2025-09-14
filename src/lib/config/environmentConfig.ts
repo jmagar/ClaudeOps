@@ -15,7 +15,7 @@ import type {
  */
 const ENV_PATTERNS = {
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test' | 'staging') || 'development',
   LOG_LEVEL: process.env.LOG_LEVEL,
   MAX_CONCURRENT_AGENTS: process.env.MAX_CONCURRENT_AGENTS,
   DEFAULT_AGENT_TIMEOUT: process.env.DEFAULT_AGENT_TIMEOUT,

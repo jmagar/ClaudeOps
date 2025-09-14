@@ -1,7 +1,7 @@
 CREATE TABLE `executions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`agent_type` text NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL CHECK (`status` IN ('pending','running','completed','failed','canceled')),
 	`started_at` text NOT NULL,
 	`completed_at` text,
 	`duration_ms` integer,
@@ -16,8 +16,8 @@ CREATE TABLE `executions` (
 	`ai_analysis` text,
 	`raw_output` text,
 	`execution_context` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `exec_status_idx` ON `executions` (`status`);--> statement-breakpoint
@@ -33,15 +33,15 @@ CREATE TABLE `agent_configurations` (
 	`name` text NOT NULL,
 	`description` text,
 	`version` text DEFAULT '1.0.0' NOT NULL,
-	`enabled` integer DEFAULT true NOT NULL,
+	`enabled` integer DEFAULT 1 NOT NULL CHECK (`enabled` IN (0,1)),
 	`config` text,
 	`max_cost_per_execution` real,
 	`max_duration_ms` integer,
 	`timeout_ms` integer DEFAULT 300000,
 	`max_concurrent_executions` integer DEFAULT 1,
 	`cooldown_ms` integer DEFAULT 0,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `agent_configurations_agent_type_unique` ON `agent_configurations` (`agent_type`);--> statement-breakpoint

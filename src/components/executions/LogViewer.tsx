@@ -1,15 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as ReactWindow from 'react-window';
-const List = ReactWindow.FixedSizeList;
-
-// Define the props interface locally since react-window types might be inconsistent
-interface ReactWindowChildProps {
-  index: number;
-  style: React.CSSProperties;
-  data: any;
-}
+// Simplified LogViewer without virtualization
 import { LogEntry } from '@/hooks/useExecutionLogs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download, Search, Filter, RotateCcw, Eye, EyeOff } from 'lucide-react';
+// Using built-in date formatting instead of date-fns
+
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+type LevelFilter = 'all' | LogLevel;
 
 interface LogViewerProps {
   executionId: string;
@@ -26,88 +22,7 @@ interface LogViewerProps {
   className?: string;
 }
 
-interface LogItemProps extends ReactWindowChildProps {
-  data: {
-    logs: LogEntry[];
-    searchTerm: string;
-    showTimestamp: boolean;
-  };
-}
-
-// Individual log item component for virtual scrolling
-const LogItem: React.FC<LogItemProps> = ({ index, style, data }) => {
-  const { logs, searchTerm, showTimestamp } = data;
-  const log = logs[index];
-  
-  if (!log) return null;
-
-  // Level styling configuration
-  const levelConfig = {
-    debug: { color: 'text-gray-500', bg: 'bg-gray-50', badge: 'bg-gray-100 text-gray-700' },
-    info: { color: 'text-blue-600', bg: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700' },
-    warn: { color: 'text-yellow-600', bg: 'bg-yellow-50', badge: 'bg-yellow-100 text-yellow-700' },
-    error: { color: 'text-red-600', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700' }
-  };
-
-  const config = levelConfig[log.level];
-  
-  // Highlight search terms in the message
-  const highlightSearchTerm = (text: string, searchTerm: string) => {
-    if (!searchTerm) return text;
-    
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    const parts = text.split(regex);
-    
-    return parts.map((part, index) => 
-      regex.test(part) ? 
-        <mark key={index} className="bg-yellow-200 px-1 rounded">{part}</mark> : 
-        part
-    );
-  };
-
-  // Format timestamp
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit'
-    }) + '.' + String(date.getMilliseconds()).padStart(3, '0');
-  };
-
-  return (
-    <div 
-      style={style} 
-      className={`px-3 py-2 border-b border-gray-100 font-mono text-sm transition-colors hover:${config.bg}`}
-    >
-      <div className="flex items-start gap-2">
-        {showTimestamp && (
-          <span className="text-gray-400 text-xs whitespace-nowrap flex-shrink-0 min-w-[80px]">
-            {formatTimestamp(log.timestamp)}
-          </span>
-        )}
-        
-        <Badge 
-          variant="outline" 
-          className={`text-xs ${config.badge} flex-shrink-0 min-w-[50px] justify-center`}
-        >
-          {log.level.toUpperCase()}
-        </Badge>
-        
-        {log.source && (
-          <Badge variant="outline" className="text-xs text-gray-600 flex-shrink-0">
-            {log.source}
-          </Badge>
-        )}
-        
-        <span className={`${config.color} flex-1 whitespace-pre-wrap break-words leading-5`}>
-          {highlightSearchTerm(log.message, searchTerm)}
-        </span>
-      </div>
-    </div>
-  );
-};
+// Simple log viewer interface
 
 export default function LogViewer({ 
   executionId, 
@@ -117,13 +32,13 @@ export default function LogViewer({
   className = ''
 }: LogViewerProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [levelFilter, setLevelFilter] = useState<string>('all');
+  const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [autoScroll, setAutoScroll] = useState(true);
   const [showTimestamp, setShowTimestamp] = useState(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   
-  const listRef = useRef<List>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Filter and search logs
@@ -132,9 +47,9 @@ export default function LogViewer({
 
     // Filter by level
     if (levelFilter !== 'all') {
-      const levelPriority = { debug: 0, info: 1, warn: 2, error: 3 };
-      const minPriority = levelPriority[levelFilter as keyof typeof levelPriority];
-      filtered = filtered.filter(log => levelPriority[log.level] >= minPriority);
+      const levelPriority: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+      const minPriority = levelPriority[levelFilter];
+      filtered = filtered.filter(log => levelPriority[log.level as LogLevel] >= minPriority);
     }
 
     // Filter by source
@@ -169,34 +84,14 @@ export default function LogViewer({
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
     if (autoScroll && isAtBottom && filteredLogs.length > 0 && listRef.current) {
-      listRef.current.scrollToItem(filteredLogs.length - 1, 'end');
+      listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [filteredLogs.length, autoScroll, isAtBottom]);
-
-  // Handle scroll events to determine if user is at bottom
-  const handleScroll = useCallback(({ scrollOffset, scrollDirection }: any) => {
-    if (!listRef.current) return;
-    
-    const list = listRef.current;
-    const itemHeight = 60; // Approximate item height
-    const containerHeight = height;
-    const totalHeight = filteredLogs.length * itemHeight;
-    const scrollBottom = scrollOffset + containerHeight;
-    const threshold = 100; // Allow some threshold for "near bottom"
-    
-    const atBottom = scrollBottom >= totalHeight - threshold;
-    setIsAtBottom(atBottom);
-
-    // If user scrolls up, disable auto-scroll
-    if (scrollDirection === 'backward' && autoScroll) {
-      setAutoScroll(false);
-    }
-  }, [height, filteredLogs.length, autoScroll]);
 
   // Re-enable auto-scroll when manually scrolling to bottom
   const scrollToBottom = useCallback(() => {
     if (listRef.current && filteredLogs.length > 0) {
-      listRef.current.scrollToItem(filteredLogs.length - 1, 'end');
+      listRef.current.scrollTop = listRef.current.scrollHeight;
       setAutoScroll(true);
       setIsAtBottom(true);
     }
@@ -235,9 +130,9 @@ export default function LogViewer({
 
   // Get log statistics
   const logStats = useMemo(() => {
-    const byLevel = { debug: 0, info: 0, warn: 0, error: 0 };
+    const byLevel: Record<LogLevel, number> = { debug: 0, info: 0, warn: 0, error: 0 };
     logs.forEach(log => {
-      byLevel[log.level]++;
+      byLevel[log.level as LogLevel]++;
     });
     
     return {
@@ -296,7 +191,7 @@ export default function LogViewer({
             />
           </div>
           
-          <Select value={levelFilter} onValueChange={setLevelFilter}>
+          <Select value={levelFilter} onValueChange={(value: LevelFilter) => setLevelFilter(value)}>
             <SelectTrigger className="w-[120px] h-8">
               <SelectValue placeholder="Level" />
             </SelectTrigger>
@@ -338,22 +233,57 @@ export default function LogViewer({
 
       <CardContent className="p-0">
         <div ref={containerRef} className="relative">
-          {/* Virtual scrolled log list */}
-          <List
-            ref={listRef}
-            height={height}
-            itemCount={filteredLogs.length}
-            itemSize={60}
-            itemData={{
-              logs: filteredLogs,
-              searchTerm,
-              showTimestamp
-            }}
-            onScroll={handleScroll}
-            overscanCount={5}
-          >
-            {LogItem}
-          </List>
+          {/* Simple scrollable log list */}
+          {filteredLogs.length > 0 ? (
+            <div
+              ref={listRef}
+              className="overflow-y-auto space-y-1 p-2"
+              style={{ height }}
+              onScroll={(e) => {
+                const target = e.target as HTMLDivElement;
+                const { scrollTop, scrollHeight, clientHeight } = target;
+                setIsAtBottom(scrollTop + clientHeight >= scrollHeight - 100);
+              }}
+            >
+              {filteredLogs.map((log, index) => (
+                <div
+                  key={`${log.id}-${index}`}
+                  className="min-h-[60px] flex items-start space-x-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-900 rounded text-sm font-mono"
+                >
+                  {showTimestamp && (
+                    <span className="text-xs text-gray-500 shrink-0 w-24">
+                      {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                        hour12: false,
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                      })}
+                    </span>
+                  )}
+                  <Badge
+                    variant={log.level === 'error' ? 'destructive' : log.level === 'warn' ? 'secondary' : 'default'}
+                    className="shrink-0"
+                  >
+                    {log.level.toUpperCase()}
+                  </Badge>
+                  <span className="flex-1 break-all">
+                    {searchTerm ? (
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: log.message.replace(
+                            new RegExp(searchTerm, 'gi'),
+                            '<mark>$&</mark>'
+                          )
+                        }}
+                      />
+                    ) : (
+                      log.message
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {/* Empty state */}
           {filteredLogs.length === 0 && (

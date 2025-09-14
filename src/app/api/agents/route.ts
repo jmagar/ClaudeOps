@@ -49,10 +49,10 @@ export const POST = withErrorHandler<AgentConfiguration>(
     const body = await req.json();
     const validatedData = validateRequestBody(body, CreateAgentConfigSchema);
     
-    // Convert config object to JSON string if provided
+    // Use the validated config value directly
     const agentData = {
       ...validatedData,
-      config: validatedData.config || (body.config ? JSON.stringify(body.config) : undefined)
+      config: validatedData.config
     };
     
     return handleAsyncOperation(

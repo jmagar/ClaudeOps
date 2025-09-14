@@ -7,8 +7,8 @@ export default defineConfig({
   out: './drizzle',
   dbCredentials: {
     url: process.env.NODE_ENV === 'production' 
-      ? path.join(process.cwd(), 'data', 'production.db')
-      : path.join(process.cwd(), 'data', 'development.db')
+      ? 'file:' + path.join(process.cwd(), 'data', 'production.db')
+      : 'file:' + path.join(process.cwd(), 'data', 'development.db')
   },
   verbose: true,
   strict: true,

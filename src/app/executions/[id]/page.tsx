@@ -1,6 +1,5 @@
-import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
-import ExecutionDetail from '@/components/executions/ExecutionDetail';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
 
 interface ExecutionPageProps {
@@ -84,6 +83,11 @@ function ExecutionDetailSkeleton() {
   );
 }
 
+// Dynamically import ExecutionDetail with loading skeleton
+const ExecutionDetail = dynamic(() => import('@/components/executions/ExecutionDetail'), {
+  loading: () => <ExecutionDetailSkeleton />
+});
+
 // Validate execution ID format
 function isValidExecutionId(id: string): boolean {
   // Execution IDs should be UUIDs or similar format
@@ -102,9 +106,7 @@ export default async function ExecutionPage({ params }: ExecutionPageProps) {
 
   return (
     <div className="container mx-auto p-6">
-      <Suspense fallback={<ExecutionDetailSkeleton />}>
-        <ExecutionDetail executionId={id} />
-      </Suspense>
+      <ExecutionDetail executionId={id} />
     </div>
   );
 }

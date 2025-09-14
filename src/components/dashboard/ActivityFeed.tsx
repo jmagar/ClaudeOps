@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -31,20 +31,23 @@ export function ActivityFeed() {
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
-  // WebSocket for real-time updates
-  const { isConnected, lastMessage } = useWebSocket({
-    onMessage: (message) => {
-      if (message.type === 'execution:progress' || message.type === 'execution:completed') {
-        // Refresh activities when executions are updated
-        fetchActivities()
+  // WebSocket for real-time updates with debounced refresh
+  const { isConnected } = useWebSocket({
+    onMessage: (() => {
+      let timeout: ReturnType<typeof setTimeout> | null = null
+      return (message) => {
+        if (message.type === 'execution:progress' || message.type === 'execution:completed') {
+          if (timeout) clearTimeout(timeout)
+          timeout = setTimeout(() => fetchActivities(), 500)
+        }
       }
-    }
+    })()
   })
 
-  const fetchActivities = async (showRefreshing = false) => {
+  const fetchActivities = useCallback(async (showRefreshing = false) => {
     try {
       if (showRefreshing) setRefreshing(true)
-      if (!activities.length) setLoading(true)
+      setLoading(prevLoading => prevLoading || activities.length === 0)
       setError(null)
 
       const response = await fetch('/api/executions?limit=20&sortBy=startedAt&sortOrder=desc')
@@ -73,7 +76,7 @@ export function ActivityFeed() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [activities.length])
 
   const getRelativeTime = (timestamp: string): string => {
     const now = new Date()
@@ -139,7 +142,7 @@ export function ActivityFeed() {
     }, 120000)
 
     return () => clearInterval(interval)
-  }, [isConnected])
+  }, [isConnected, fetchActivities])
 
   if (loading) {
     return (
@@ -259,7 +262,7 @@ export function ActivityFeed() {
                   
                   {/* Cost and additional info */}
                   <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                    {activity.costUsd && (
+                    {activity.costUsd != null && Number.isFinite(activity.costUsd) && (
                       <span className="flex items-center space-x-1">
                         <DollarSign className="h-3 w-3" />
                         <span>${activity.costUsd.toFixed(4)}</span>

@@ -10,6 +10,7 @@ import {
 } from '@/lib/middleware/validation';
 import { costService } from '@/lib/services/costService';
 import type { CostTracking } from '@/lib/types/database';
+import type { PaginationResponse } from '@/lib/types/api';
 
 /**
  * GET /api/costs/breakdown
@@ -20,10 +21,8 @@ export const GET = withErrorHandler<CostTracking[]>(
     const searchParams = req.nextUrl.searchParams;
     const filterParams = validateQueryParams(searchParams, CostAnalysisQuerySchema);
     
-    const { page, limit, ...filters } = filterParams;
-    
     return handleAsyncOperation(
-      () => costService.getCostAnalysis(filters)
+      () => costService.getCostAnalysis(filterParams)
     );
   }
 );

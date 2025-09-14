@@ -66,8 +66,20 @@ export default function ExecutionActions({
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to cancel execution');
+        let errorMessage = 'Failed to cancel execution';
+        try {
+          const error = await response.json();
+          errorMessage = error.message || errorMessage;
+        } catch {
+          // Fallback to text response if JSON parsing fails
+          try {
+            const textError = await response.text();
+            errorMessage = textError || response.statusText || errorMessage;
+          } catch {
+            // Use default message if all parsing fails
+          }
+        }
+        throw new Error(errorMessage);
       }
       
       const result = await response.json();
@@ -110,6 +122,15 @@ export default function ExecutionActions({
       }
       
       const result = await response.json();
+      
+      // Defensive check to ensure result has valid executionId
+      if (typeof result !== 'object' || result === null || 
+          typeof result.executionId !== 'string' || result.executionId.length === 0) {
+        toast.error('Restart Failed', {
+          description: 'Invalid response format from server'
+        });
+        return;
+      }
       
       toast.success('Execution Restarted', {
         description: `Started new execution with ID ${result.executionId.substring(0, 8)}`
@@ -211,7 +232,7 @@ export default function ExecutionActions({
   // Open execution in new tab
   const handleOpenNewTab = useCallback(() => {
     const url = `/executions/${executionId}`;
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener,noreferrer');
   }, [executionId]);
 
   return (

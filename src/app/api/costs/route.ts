@@ -7,14 +7,11 @@ import {
 } from '@/lib/middleware/errorHandler';
 import { 
   RecordCostSchema,
-  CostAnalysisQuerySchema,
-  CostTrendsQuerySchema,
-  type RecordCostRequest,
-  type CostAnalysisQuery,
-  type CostTrendsQuery
+  CostAnalysisQuerySchema
 } from '@/lib/middleware/validation';
 import { costService } from '@/lib/services/costService';
-import type { CostTracking, CostStats, CostTrendData } from '@/lib/types/database';
+import type { CostTracking } from '@/lib/types/database';
+import type { PaginationResponse } from '@/lib/types/api';
 
 /**
  * GET /api/costs
@@ -25,10 +22,8 @@ export const GET = withErrorHandler<CostTracking[]>(
     const searchParams = req.nextUrl.searchParams;
     const filterParams = validateQueryParams(searchParams, CostAnalysisQuerySchema);
     
-    const { page, limit, ...filters } = filterParams;
-    
     return handleAsyncOperation(
-      () => costService.getCostAnalysis(filters)
+      () => costService.getCostAnalysis(filterParams)
     );
   }
 );

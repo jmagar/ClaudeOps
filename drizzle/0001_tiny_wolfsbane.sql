@@ -19,20 +19,20 @@ CREATE INDEX `steps_execution_idx` ON `execution_steps` (`execution_id`);--> sta
 CREATE INDEX `steps_number_idx` ON `execution_steps` (`execution_id`,`step_number`);--> statement-breakpoint
 CREATE TABLE `cost_tracking` (
 	`id` text PRIMARY KEY NOT NULL,
-	`execution_id` text,
+	`execution_id` text NOT NULL,
 	`model_used` text NOT NULL,
-	`input_tokens` integer DEFAULT 0 NOT NULL,
-	`output_tokens` integer DEFAULT 0 NOT NULL,
-	`input_cost_usd` real DEFAULT 0 NOT NULL,
-	`output_cost_usd` real DEFAULT 0 NOT NULL,
-	`total_cost_usd` real DEFAULT 0 NOT NULL,
+	`input_tokens` integer DEFAULT 0 NOT NULL CHECK (`input_tokens` >= 0),
+	`output_tokens` integer DEFAULT 0 NOT NULL CHECK (`output_tokens` >= 0),
+	`input_cost_usd` real DEFAULT 0 NOT NULL CHECK (`input_cost_usd` >= 0),
+	`output_cost_usd` real DEFAULT 0 NOT NULL CHECK (`output_cost_usd` >= 0),
+	`total_cost_usd` real DEFAULT 0 NOT NULL CHECK (`total_cost_usd` >= 0),
 	`request_id` text,
 	`response_time_ms` integer,
-	`cache_hit` integer DEFAULT false,
+	`cache_hit` integer DEFAULT 0 CHECK (`cache_hit` IN (0,1)),
 	`timestamp` text NOT NULL,
-	`year` integer NOT NULL,
-	`month` integer NOT NULL,
-	`day` integer NOT NULL,
+	`year` integer NOT NULL CHECK(year BETWEEN 1 AND 9999),
+	`month` integer NOT NULL CHECK(month BETWEEN 1 AND 12),
+	`day` integer NOT NULL CHECK(day BETWEEN 1 AND 31),
 	FOREIGN KEY (`execution_id`) REFERENCES `executions`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

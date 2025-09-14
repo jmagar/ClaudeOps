@@ -9,6 +9,12 @@ import {
   MetricsQuerySchema,
   type MetricsQuery
 } from '@/lib/middleware/validation';
+import { 
+  authenticateRequest, 
+  hasAdminRole, 
+  validateCSRFToken, 
+  createAuthErrorResponse 
+} from '@/lib/middleware/auth';
 import { metricsService } from '@/lib/services/metricsService';
 import { systemMonitor } from '@/lib/monitoring/systemMonitor';
 import { metricsCollector } from '@/lib/monitoring/metricsCollector';
@@ -146,6 +152,12 @@ interface SystemHealthSummaryResponse {
  */
 export const GET = withErrorHandler<SystemMetricsResponse | MetricsHistoryResponse | MetricsTrendsResponse | SystemHealthSummaryResponse>(
   async (req: NextRequest) => {
+    // Authentication check
+    const { authenticated, user, error } = await authenticateRequest(req);
+    if (!authenticated) {
+      return createAuthErrorResponse(error || 'Authentication required', 401);
+    }
+    
     const searchParams = req.nextUrl.searchParams;
     const query = validateQueryParams(searchParams, MetricsQuerySchema);
     
@@ -176,6 +188,22 @@ export const GET = withErrorHandler<SystemMetricsResponse | MetricsHistoryRespon
  */
 export const POST = withErrorHandler<any>(
   async (req: NextRequest) => {
+    // Authentication check
+    const { authenticated, user, error } = await authenticateRequest(req);
+    if (!authenticated) {
+      return createAuthErrorResponse(error || 'Authentication required', 401);
+    }
+    
+    // Authorization check - admin role required for control actions
+    if (!hasAdminRole(user)) {
+      return createAuthErrorResponse('Admin access required', 403);
+    }
+    
+    // CSRF protection for state-changing operations
+    if (!validateCSRFToken(req)) {
+      return createAuthErrorResponse('Invalid CSRF token or origin', 403);
+    }
+    
     const body = await req.json();
     const { action, ...params } = body;
     
@@ -264,7 +292,7 @@ async function getMetricsOverview(query: MetricsQuery): Promise<SystemMetricsRes
         stats: metricsCollector.getCollectionStats()
       },
       scheduler: {
-        isRunning: true, // Scheduler doesn't have an isRunning method
+        isRunning: monitoringScheduler.getStats().enabledTasks > 0,
         stats: monitoringScheduler.getStats()
       }
     };
@@ -407,14 +435,16 @@ async function getMetricsHistory(query: MetricsQuery): Promise<MetricsHistoryRes
     return response;
 }
 
+type Timeframe = 'hour' | 'day' | 'week' | 'month';
+
 /**
  * Get metrics trends analysis
  */
 async function getMetricsTrends(query: MetricsQuery): Promise<MetricsTrendsResponse> {
-    const timeframe = query.timeframe || 'day';
+    const timeframe: Timeframe = query.timeframe || 'day';
     const metrics = query.metrics ? query.metrics.split(',') : ['cpu', 'memory', 'disk'];
     
-    const trends = await metricsCollector.getHistoricalTrends(metrics, timeframe as any);
+    const trends = await metricsCollector.getHistoricalTrends(metrics, timeframe);
     
     const response: MetricsTrendsResponse = {
       timeframe,
@@ -612,38 +642,47 @@ async function updateThresholds(thresholds: any) {
     };
 }
 
+interface Health {
+  cpuUsage?: number | null;
+  memoryUsage?: number | null;
+  diskUsage?: number | null;
+  internetConnected?: boolean | null;
+  alerts?: any[];
+}
+
 /**
  * Calculate health score from system health data
  */
-function calculateHealthScore(health: any): number {
+function calculateHealthScore(health: Health): number {
   let score = 100;
   
   // Deduct points based on resource usage
-  if (health.cpuUsage !== null) {
+  if (health.cpuUsage != null && typeof health.cpuUsage === 'number') {
     if (health.cpuUsage >= 90) score -= 30;
     else if (health.cpuUsage >= 70) score -= 15;
     else if (health.cpuUsage >= 50) score -= 5;
   }
   
-  if (health.memoryUsage !== null) {
+  if (health.memoryUsage != null && typeof health.memoryUsage === 'number') {
     if (health.memoryUsage >= 95) score -= 25;
     else if (health.memoryUsage >= 80) score -= 10;
     else if (health.memoryUsage >= 60) score -= 5;
   }
   
-  if (health.diskUsage !== null) {
+  if (health.diskUsage != null && typeof health.diskUsage === 'number') {
     if (health.diskUsage >= 95) score -= 20;
     else if (health.diskUsage >= 85) score -= 10;
     else if (health.diskUsage >= 70) score -= 5;
   }
   
-  // Deduct points for connectivity issues
+  // Deduct points for connectivity issues (only when explicitly false)
   if (health.internetConnected === false) {
     score -= 15;
   }
   
-  // Deduct points based on alerts
-  score -= Math.min(health.alerts.length * 5, 25);
+  // Deduct points based on alerts (treat missing alerts as empty array)
+  const alertsCount = health.alerts?.length || 0;
+  score -= Math.min(alertsCount * 5, 25);
   
   return Math.max(0, Math.min(100, score));
 }

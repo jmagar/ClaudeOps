@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { 
   TrendingUp, 
   TrendingDown, 
+  Minus,
   Clock, 
   CheckCircle, 
   XCircle, 
@@ -37,6 +38,18 @@ export function ExecutionStats() {
         setError(null)
 
         const response = await fetch('/api/executions/stats')
+        
+        if (!response.ok) {
+          let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+          try {
+            const errorData = await response.json()
+            errorMessage = errorData.error?.message || errorMessage
+          } catch {
+            // If error response isn't JSON, use the HTTP status message
+          }
+          throw new Error(errorMessage)
+        }
+        
         const data: ApiResponse<ExecutionStatsResponse> = await response.json()
 
         if (!data.success) {
@@ -116,9 +129,18 @@ export function ExecutionStats() {
   }
 
   const formatTrend = (value: number) => {
-    const isPositive = value > 0
-    const TrendIcon = isPositive ? TrendingUp : TrendingDown
-    const color = isPositive ? 'text-green-600' : 'text-red-600'
+    let TrendIcon, color
+    
+    if (value === 0) {
+      TrendIcon = Minus
+      color = 'text-gray-600'
+    } else if (value > 0) {
+      TrendIcon = TrendingUp
+      color = 'text-green-600'
+    } else {
+      TrendIcon = TrendingDown
+      color = 'text-red-600'
+    }
     
     return (
       <span className={`flex items-center text-xs ${color}`}>

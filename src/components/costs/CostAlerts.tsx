@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +43,7 @@ export function CostAlerts({ alerts, budgets, onRefresh }: CostAlertsProps) {
   const [alertHistory, setAlertHistory] = useState<AlertHistory[]>([]);
   const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const sentNotificationTags = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     // Check browser notification permission
@@ -56,18 +57,45 @@ export function CostAlerts({ alerts, budgets, onRefresh }: CostAlertsProps) {
 
   useEffect(() => {
     // Show browser notifications for new alerts
-    if (notificationsEnabled && alerts.length > 0) {
+    if (typeof window !== 'undefined' && 
+        'Notification' in window && 
+        Notification.permission === 'granted' && 
+        notificationsEnabled && 
+        alerts.length > 0) {
+      
       alerts.forEach(alert => {
         if (alert.triggered) {
-          new Notification('Budget Alert - ClaudeOps', {
-            body: alert.message,
-            icon: '/favicon.ico',
-            tag: `budget-alert-${alert.type}`,
-          });
+          const tag = `budget-alert-${alert.type}`;
+          
+          // Only send if we haven't already sent this notification
+          if (!sentNotificationTags.current.has(tag)) {
+            try {
+              new Notification('Budget Alert - ClaudeOps', {
+                body: alert.message,
+                icon: '/favicon.ico',
+                tag,
+              });
+              
+              // Mark as sent
+              sentNotificationTags.current.add(tag);
+            } catch (error) {
+              console.warn('Failed to create notification:', error);
+            }
+          }
         }
       });
     }
   }, [alerts, notificationsEnabled]);
+
+  // Clear sent notification tags when alerts change significantly
+  useEffect(() => {
+    // Clear tags after 5 minutes to allow re-notification for recurring issues
+    const clearTimer = setTimeout(() => {
+      sentNotificationTags.current.clear();
+    }, 5 * 60 * 1000);
+
+    return () => clearTimeout(clearTimer);
+  }, [alerts]);
 
   const generateMockAlertHistory = () => {
     // This would normally come from an API
@@ -113,8 +141,11 @@ export function CostAlerts({ alerts, budgets, onRefresh }: CostAlertsProps) {
 
   const handleRefresh = async () => {
     setLoading(true);
-    await onRefresh();
-    setLoading(false);
+    try {
+      await onRefresh();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatCurrency = (amount: number) => {

@@ -1,3 +1,5 @@
+docs/plans
+
 # Dependencies
 node_modules/
 .pnp
@@ -8,9 +10,7 @@ node_modules/
 .nyc_output
 
 # Next.js
-/.next/
-/out/
-next-env.d.ts
+# next-env.d.ts is generated and should be committed
 
 # Production
 /build
@@ -115,9 +115,6 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
-
-# Drizzle
-/drizzle/migrations/
 
 # Local development files
 *.local
