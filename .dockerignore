@@ -69,8 +69,7 @@ jspm_packages/
 .cache
 .parcel-cache
 
-# next.js build output
-.next
+# next.js build output (already covered in Build output section)
 
 # nuxt.js build output
 .nuxt
@@ -94,6 +93,13 @@ jspm_packages/
 .vscode-test
 
 # Database files (development/testing)
+# SQLite databases - generic patterns
+*.db*
+*.sqlite*
+**/*.db*
+**/*.sqlite*
+
+# Specific development/test databases
 data/development.db*
 data/test.db*
 data/*.db-shm
@@ -144,7 +150,7 @@ __tests__/
 *.spec.*
 jest.config.*
 cypress/
-.nyc_output/
+# .nyc_output (already covered in nyc test coverage section)
 
 # Linting
 .eslintrc*

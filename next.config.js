@@ -27,7 +27,6 @@ const nextConfig = {
   
   // Environment variables
   env: {
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     WEBSOCKET_PORT: process.env.WEBSOCKET_PORT,
   },
@@ -100,10 +99,19 @@ const nextConfig = {
   // Redirects for HTTPS enforcement in production
   async redirects() {
     if (process.env.NODE_ENV === 'production' && process.env.ENFORCE_HTTPS === 'true') {
+      // Get the host from environment variables
+      const host = process.env.ENFORCE_HTTPS_HOST || process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '');
+      
+      // Return empty array if no host is configured to avoid breaking non-prod deployments
+      if (!host) {
+        console.warn('HTTPS enforcement enabled but no host configured. Set ENFORCE_HTTPS_HOST or NEXT_PUBLIC_APP_URL.');
+        return [];
+      }
+      
       return [
         {
           source: '/(.*)',
-          destination: 'https://claudeops.yourdomain.com/$1',
+          destination: `https://${host}/$1`,
           permanent: false,
           has: [
             {

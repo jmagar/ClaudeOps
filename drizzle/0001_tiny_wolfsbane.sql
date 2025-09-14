@@ -54,6 +54,7 @@ CREATE TABLE `monthly_cost_summaries` (
 );
 --> statement-breakpoint
 CREATE INDEX `summary_year_month_idx` ON `monthly_cost_summaries` (`year`,`month`);--> statement-breakpoint
+CREATE UNIQUE INDEX `summary_year_month_unique_idx` ON `monthly_cost_summaries` (`year`,`month`);--> statement-breakpoint
 CREATE TABLE `schedules` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -94,18 +95,18 @@ CREATE INDEX `settings_category_idx` ON `app_settings` (`category`);--> statemen
 CREATE TABLE `system_metrics` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text DEFAULT 'localhost' NOT NULL,
-	`cpu_usage_percent` real,
-	`memory_usage_percent` real,
-	`disk_usage_percent` real,
-	`load_average_1m` real,
-	`load_average_5m` real,
-	`load_average_15m` real,
-	`disk_free_bytes` integer,
-	`disk_total_bytes` integer,
-	`internet_connected` integer,
-	`claude_api_latency_ms` integer,
-	`overall_health` text DEFAULT 'healthy' NOT NULL,
-	`timestamp` text NOT NULL
+	`cpu_usage_percent` real CHECK (cpu_usage_percent BETWEEN 0 AND 100),
+	`memory_usage_percent` real CHECK (memory_usage_percent BETWEEN 0 AND 100),
+	`disk_usage_percent` real CHECK (disk_usage_percent BETWEEN 0 AND 100),
+	`load_average_1m` real CHECK (load_average_1m >= 0),
+	`load_average_5m` real CHECK (load_average_5m >= 0),
+	`load_average_15m` real CHECK (load_average_15m >= 0),
+	`disk_free_bytes` integer DEFAULT 0 CHECK (disk_free_bytes >= 0),
+	`disk_total_bytes` integer DEFAULT 0 CHECK (disk_total_bytes >= 0),
+	`internet_connected` integer DEFAULT 0 CHECK (internet_connected IN (0,1)),
+	`claude_api_latency_ms` integer DEFAULT 0 CHECK (claude_api_latency_ms >= 0),
+	`overall_health` text DEFAULT 'healthy' NOT NULL CHECK (overall_health IN ('healthy','degraded','unhealthy')),
+	`timestamp` text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `metrics_node_timestamp_idx` ON `system_metrics` (`node_id`,`timestamp`);--> statement-breakpoint

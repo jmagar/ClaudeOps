@@ -290,6 +290,13 @@ export class MonitoringScheduler extends EventEmitter {
   }
 
   /**
+   * Check if scheduler is running
+   */
+  isSchedulerRunning(): boolean {
+    return this.isRunning;
+  }
+
+  /**
    * Get scheduler statistics
    */
   getStats(): SchedulerStats {
@@ -410,14 +417,19 @@ export class MonitoringScheduler extends EventEmitter {
         const result = await this.healthAgent.execute({
           include_docker: true,
           include_security_scan: true,
-          detailed_service_analysis: true
+          detailed_service_analysis: true,
+          onLog: (message, level) => {
+            // Stream logs in real-time during execution
+            const logLevel = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : level === 'debug' ? '🔧' : 'ℹ️';
+            console.log(`[HealthAgent] ${logLevel} ${message}`);
+          }
         });
 
         if (result.status === 'failed') {
           throw new Error(result.error || 'Health check failed');
         }
 
-        console.log(`Health check completed: ${result.summary}`);
+        console.log(`✅ Health check completed: ${result.summary}`);
       }
     });
 

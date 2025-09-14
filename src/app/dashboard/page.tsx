@@ -4,6 +4,7 @@ import { ExecutionStats } from '@/components/dashboard/ExecutionStats'
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { SystemHealth } from '@/components/dashboard/SystemHealth'
+import { SystemStatusIndicator } from '@/components/dashboard/SystemStatusIndicator'
 
 export const metadata: Metadata = {
   title: 'Execution Dashboard - ClaudeOps',
@@ -25,10 +26,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center space-x-4">
               <div className="hidden sm:flex items-center space-x-2 text-sm">
-                <div className="flex items-center space-x-1">
-                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                  <span>System Healthy</span>
-                </div>
+                <SystemStatusIndicator />
               </div>
             </div>
           </div>

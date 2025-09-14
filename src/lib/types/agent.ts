@@ -205,6 +205,10 @@ export interface AIAnalysis {
   alerts: Alert[];
   health_score: number; // 0-100
   priority_actions: string[];
+  cost?: number;
+  usage?: TokenUsage;
+  model_used?: string;
+  duration?: number;
 }
 
 export interface Recommendation {
@@ -298,9 +302,15 @@ export interface HealthAnalysisResult {
   critical_issues: string[];
   warnings: string[];
   recommendations: Recommendation[];
+  cost?: number;
+  usage?: TokenUsage;
+  model_used?: string;
+  duration?: number;
 }
 
 // Agent configuration types
+export type LogCallback = (message: string, level?: 'info' | 'warn' | 'error' | 'debug') => void;
+
 export interface AgentExecutionOptions {
   timeout_ms?: number;
   max_retries?: number;
@@ -309,6 +319,7 @@ export interface AgentExecutionOptions {
   detailed_service_analysis?: boolean;
   historical_comparison_days?: number;
   ai_analysis_depth?: 'basic' | 'detailed' | 'comprehensive';
+  onLog?: LogCallback;
 }
 
 export interface AgentExecutionContext {

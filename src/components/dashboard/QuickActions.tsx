@@ -65,7 +65,7 @@ const availableAgents: AgentConfig[] = [
   }
 ]
 
-interface ExecutionProgress {
+interface QuickActionExecutionProgress {
   agentType: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   progress?: number
@@ -74,7 +74,7 @@ interface ExecutionProgress {
 }
 
 export function QuickActions() {
-  const [executions, setExecutions] = useState<Record<string, ExecutionProgress>>({})
+  const [executions, setExecutions] = useState<Record<string, QuickActionExecutionProgress>>({})
   const [lastExecution, setLastExecution] = useState<{ type: string; timestamp: number } | null>(null)
   // Map from executionId to agentType to resolve the hard-coded issue
   const [executionToAgentMap, setExecutionToAgentMap] = useState<Map<string, string>>(new Map())

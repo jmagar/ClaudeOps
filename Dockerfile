@@ -45,6 +45,7 @@ RUN apk add --no-cache \
     sqlite \
     curl \
     tini \
+    libstdc++ \
     && addgroup -g 1001 -S nodejs \
     && adduser -S nextjs -u 1001
 
@@ -56,13 +57,11 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 
-# Copy database migrations and schema
-COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
-COPY --from=build --chown=nextjs:nodejs /app/drizzle.config.ts ./
+# Copy production dependencies for runtime services (migrations, etc.)
+COPY --from=build --chown=nextjs:nodejs /app/node_modules ./node_modules
 
-# Copy server configuration
-COPY --from=build --chown=nextjs:nodejs /app/server.ts ./
-COPY --from=build --chown=nextjs:nodejs /app/package.json ./
+# Copy database migrations
+COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/logs /app/temp/agents /app/backups && \
@@ -70,9 +69,9 @@ RUN mkdir -p /app/data /app/logs /app/temp/agents /app/backups && \
 
 # Create lightweight runtime migration script (avoids needing drizzle-kit in prod)
 RUN cat > /app/runtime-migrate.js <<'EOF'
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+const Database = require('better-sqlite3');
+const { drizzle } = require('drizzle-orm/better-sqlite3');
+const { migrate } = require('drizzle-orm/better-sqlite3/migrator');
 
 const dbPath = '/app/data/production.db';
 const migrationsFolder = '/app/drizzle';
@@ -80,15 +79,15 @@ const migrationsFolder = '/app/drizzle';
 const sqlite = new Database(dbPath);
 const db = drizzle(sqlite);
 
-(async () => {
+try {
   console.log('[migrate] Applying migrations from', migrationsFolder);
-  await migrate(db, { migrationsFolder });
+  migrate(db, { migrationsFolder });
   console.log('[migrate] Done');
   sqlite.close();
-})().catch(err => {
+} catch (err) {
   console.error('[migrate] Failed:', err);
   process.exit(1);
-});
+}
 EOF
 
 # Create startup script
@@ -108,7 +107,7 @@ echo "Running database migrations (idempotent)..."
 node /app/runtime-migrate.js
 
 echo "Starting server..."
-exec npx tsx server.ts
+exec node server.js
 EOF
 
 RUN chmod +x /app/start.sh && chown nextjs:nodejs /app/start.sh
@@ -138,4 +137,4 @@ CMD ["/app/start.sh"]
 LABEL maintainer="ClaudeOps Team"
 LABEL version="1.0.0"
 LABEL description="AI-powered homelab automation with Claude agent execution monitoring"
-LABEL org.opencontainers.image.source="https://github.com/yourusername/claudeops"
+LABEL org.opencontainers.image.source="https://github.com/jmagar/ClaudeOps"

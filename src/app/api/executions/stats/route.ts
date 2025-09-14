@@ -23,19 +23,16 @@ export const GET = withErrorHandler<ExecutionStats & { trends?: ExecutionTrends 
     const includeTrends = searchParams.get('includeTrends') !== 'false'; // default to true
     
     return handleAsyncOperation(async () => {
-      // Get basic stats
-      const stats = await executionService.getExecutionStats();
-      
-      // Add trend data if requested
       if (includeTrends) {
-        const trends = await executionService.getExecutionTrends();
-        return {
-          ...stats,
-          trends
-        };
+        // Fetch stats and trends in parallel
+        const [stats, trends] = await Promise.all([
+          executionService.getExecutionStats(),
+          executionService.getExecutionTrends()
+        ]);
+        return { ...stats, trends };
+      } else {
+        return await executionService.getExecutionStats();
       }
-      
-      return stats;
     });
   }
 );

@@ -3,9 +3,9 @@ import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
 
 interface ExecutionPageProps {
-  params: Promise<{
+  params: {
     id: string;
-  }>;
+  };
 }
 
 // Loading component for the execution detail
@@ -96,8 +96,8 @@ function isValidExecutionId(id: string): boolean {
   return uuidRegex.test(id) || customIdRegex.test(id);
 }
 
-export default async function ExecutionPage({ params }: ExecutionPageProps) {
-  const { id } = await params;
+export default function ExecutionPage({ params }: ExecutionPageProps) {
+  const { id } = params;
   
   // Validate execution ID format
   if (!isValidExecutionId(id)) {
@@ -112,8 +112,8 @@ export default async function ExecutionPage({ params }: ExecutionPageProps) {
 }
 
 // Generate metadata for the page
-export async function generateMetadata({ params }: ExecutionPageProps) {
-  const { id } = await params;
+export function generateMetadata({ params }: ExecutionPageProps) {
+  const { id } = params;
   
   return {
     title: `Execution ${id.substring(0, 8)} - ClaudeOps`,

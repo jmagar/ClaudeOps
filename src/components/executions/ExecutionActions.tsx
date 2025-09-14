@@ -25,6 +25,39 @@ import {
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 
+// Fetch with timeout helper to prevent hanging requests
+const fetchWithTimeout = async (
+  url: string, 
+  options: RequestInit = {}, 
+  timeoutMs: number = 15000
+): Promise<Response> => {
+  const controller = new AbortController();
+  let timeoutId: NodeJS.Timeout | undefined;
+
+  try {
+    // Set up timeout
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    // Add abort signal to options
+    const fetchOptions: RequestInit = {
+      ...options,
+      signal: controller.signal
+    };
+    
+    const response = await fetch(url, fetchOptions);
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 interface ExecutionActionsProps {
   executionId: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -60,29 +93,26 @@ export default function ExecutionActions({
     setActionState(prev => ({ ...prev, cancelling: true }));
     
     try {
-      const response = await fetch(`/api/executions/${executionId}/cancel`, {
+      const response = await fetchWithTimeout(`/api/executions/${executionId}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
       
       if (!response.ok) {
-        let errorMessage = 'Failed to cancel execution';
+        let message = 'Failed to cancel execution';
         try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch {
-          // Fallback to text response if JSON parsing fails
-          try {
-            const textError = await response.text();
-            errorMessage = textError || response.statusText || errorMessage;
-          } catch {
-            // Use default message if all parsing fails
+          const data = await response.clone().json();
+          if (typeof data?.message === 'string' && data.message.trim()) {
+            message = data.message;
           }
+        } catch {
+          try {
+            const text = await response.text();
+            if (text) message = text;
+          } catch {}
         }
-        throw new Error(errorMessage);
+        throw new Error(message);
       }
-      
-      const result = await response.json();
       
       toast.success('Execution Cancelled', {
         description: `Successfully cancelled execution ${executionId.substring(0, 8)}`
@@ -107,7 +137,7 @@ export default function ExecutionActions({
     setActionState(prev => ({ ...prev, restarting: true }));
     
     try {
-      const response = await fetch('/api/agents/execute', {
+      const response = await fetchWithTimeout('/api/agents/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -117,19 +147,24 @@ export default function ExecutionActions({
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to restart execution');
+        let message = 'Failed to restart execution';
+        try {
+          const data = await response.clone().json();
+          if (typeof data?.message === 'string' && data.message.trim()) {
+            message = data.message;
+          }
+        } catch {
+          try {
+            const text = await response.text();
+            if (text) message = text;
+          } catch {}
+        }
+        throw new Error(message);
       }
       
-      const result = await response.json();
-      
-      // Defensive check to ensure result has valid executionId
-      if (typeof result !== 'object' || result === null || 
-          typeof result.executionId !== 'string' || result.executionId.length === 0) {
-        toast.error('Restart Failed', {
-          description: 'Invalid response format from server'
-        });
-        return;
+      const result = (await response.json()) as { executionId?: string };
+      if (!result?.executionId || typeof result.executionId !== 'string') {
+        throw new Error('Missing executionId in response');
       }
       
       toast.success('Execution Restarted', {
@@ -199,11 +234,26 @@ export default function ExecutionActions({
   // Export execution data
   const handleExport = useCallback(async () => {
     try {
-      const response = await fetch(`/api/executions/${executionId}`);
-      if (!response.ok) throw new Error('Failed to fetch execution data');
+      const response = await fetchWithTimeout(`/api/executions/${executionId}`);
+      if (!response.ok) {
+        let message = 'Failed to fetch execution data';
+        try {
+          const data = await response.clone().json();
+          if (typeof data?.message === 'string' && data.message.trim()) {
+            message = data.message;
+          }
+        } catch {
+          try {
+            const text = await response.text();
+            if (text) message = text;
+          } catch {}
+        }
+        throw new Error(message);
+      }
       
       const executionData = await response.json();
-      const filename = `execution-${executionId.substring(0, 8)}-${agentType}.json`;
+      const safeAgent = agentType.replace(/[^a-z0-9-_]+/gi, '-').replace(/-+/g, '-').toLowerCase();
+      const filename = `execution-${executionId.substring(0, 8)}-${safeAgent}.json`;
       
       const blob = new Blob([JSON.stringify(executionData, null, 2)], {
         type: 'application/json'

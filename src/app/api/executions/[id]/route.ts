@@ -84,8 +84,9 @@ export const DELETE = withErrorHandler<void>(
         () => executionService.deleteExecution(id, hardDelete)
       );
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
       return handleAsyncOperation(
-        () => Promise.reject(new ValidationError('Invalid query parameters', error.message))
+        () => Promise.reject(new ValidationError('Invalid query parameters', message))
       );
     }
   }

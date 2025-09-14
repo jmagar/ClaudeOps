@@ -1,137 +1,159 @@
-import { SystemCollector } from './collectors/systemCollector';
-import { DockerCollector } from './collectors/dockerCollector';
-import { ServiceCollector } from './collectors/serviceCollector';
-import { HealthAnalyzer } from './analyzers/healthAnalyzer';
-import { 
-  SystemHealthData,
-  AgentExecutionContext,
-  AgentExecutionOptions,
-  AgentResult,
-  HealthAnalysisInput,
-  SystemCollectorResult,
-  DockerCollectorResult,
-  ServiceCollectorResult
-} from '../types/agent';
+import { query } from '@anthropic-ai/claude-code';
 import { createId } from '@paralleldrive/cuid2';
+
+export interface AgentResult {
+  executionId: string;
+  agentType: string;
+  status: 'completed' | 'failed' | 'timeout' | 'cancelled';
+  result: string;
+  cost: number;
+  duration: number;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_tokens: number;
+    cache_read_tokens: number;
+  };
+  logs: string[];
+  timestamp: string;
+  error?: string;
+  summary?: string;
+}
+
+export interface AgentExecutionOptions {
+  timeout_ms?: number;
+  ai_analysis_depth?: 'basic' | 'detailed' | 'comprehensive';
+  include_security_scan?: boolean;
+  detailed_service_analysis?: boolean;
+  include_docker?: boolean;
+  onLog?: (message: string, level?: string) => void;
+}
 
 /**
  * System Health Reporter Agent
  * 
- * Provides comprehensive system analysis including:
- * - CPU, memory, disk, and network monitoring
- * - Docker container monitoring  
- * - System service health checks
- * - Security audit and vulnerability scanning
- * - AI-powered analysis and recommendations
- * - Trend detection and predictive insights
+ * Uses Claude Code SDK to give Claude direct access to system investigation tools.
+ * Claude investigates the system directly using bash commands and provides intelligent analysis.
  */
 export class SystemHealthAgent {
-  private systemCollector: SystemCollector;
-  private dockerCollector: DockerCollector;
-  private serviceCollector: ServiceCollector;
-  private healthAnalyzer: HealthAnalyzer;
-
-  constructor() {
-    this.systemCollector = new SystemCollector();
-    this.dockerCollector = new DockerCollector();
-    this.serviceCollector = new ServiceCollector();
-    this.healthAnalyzer = new HealthAnalyzer();
-  }
+  constructor() {}
 
   /**
-   * Execute system health analysis
+   * Execute system health analysis using Claude Code SDK
    */
   async execute(options: AgentExecutionOptions = {}): Promise<AgentResult> {
     const executionId = createId();
     const startTime = Date.now();
+    const logs: string[] = [];
     
-    const context: AgentExecutionContext = {
-      execution_id: executionId,
-      agent_type: 'system-health',
-      started_at: new Date().toISOString(),
-      options: {
-        timeout_ms: 300000, // 5 minutes default
-        max_retries: 2,
-        include_docker: true,
-        include_security_scan: true,
-        detailed_service_analysis: true,
-        historical_comparison_days: 7,
-        ai_analysis_depth: 'detailed',
-        ...options
+    const log = (message: string, level: 'info' | 'warn' | 'error' | 'debug' = 'info') => {
+      const logMessage = `[${new Date().toISOString()}] ${message}`;
+      logs.push(logMessage);
+      
+      if (options.onLog) {
+        options.onLog(logMessage, level);
       }
     };
 
-    const logs: string[] = [];
-    
     try {
-      logs.push(`[${new Date().toISOString()}] Starting system health analysis`);
-      logs.push(`[${new Date().toISOString()}] Execution ID: ${executionId}`);
-      logs.push(`[${new Date().toISOString()}] Options: ${JSON.stringify(context.options, null, 2)}`);
+      log('🚀 Starting comprehensive system health analysis...');
+      log(`📋 Execution ID: ${executionId}`, 'debug');
 
-      // Collect system metrics
-      logs.push(`[${new Date().toISOString()}] Collecting system metrics...`);
-      const systemMetrics = await this.collectSystemMetrics(logs);
-
-      // Collect Docker metrics if enabled
-      let dockerMetrics: DockerCollectorResult | undefined;
-      if (context.options.include_docker) {
-        logs.push(`[${new Date().toISOString()}] Collecting Docker metrics...`);
-        dockerMetrics = await this.collectDockerMetrics(logs);
-      }
-
-      // Collect service metrics
-      logs.push(`[${new Date().toISOString()}] Collecting service metrics...`);
-      const serviceMetrics = await this.collectServiceMetrics(logs);
-
-      // Prepare analysis input
-      const analysisInput: HealthAnalysisInput = {
-        system_metrics: systemMetrics,
-        docker_metrics: dockerMetrics,
-        service_metrics: serviceMetrics
+      const prompt = this.buildInvestigationPrompt(options);
+      
+      log('🔍 Launching Claude to investigate system directly...');
+      
+      let result = '';
+      let totalCost = 0;
+      let totalUsage = {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_tokens: 0,
+        cache_read_tokens: 0
       };
 
-      // Perform AI analysis
-      logs.push(`[${new Date().toISOString()}] Performing AI-powered health analysis...`);
-      const healthAnalysis = await this.healthAnalyzer.analyzeHealth(
-        analysisInput,
-        context,
-        logs
-      );
+      const claudeQuery = query({
+        prompt,
+        options: {
+          maxTurns: 50, // Allow Claude to investigate thoroughly
+          permissionMode: 'acceptEdits', // Auto-accept bash commands and file edits
+          allowedTools: ['Bash', 'Read', 'Glob', 'Grep'], // Explicitly allow investigation tools
+          customSystemPrompt: this.getSystemPrompt()
+        }
+      });
 
-      // Compile final health report
-      logs.push(`[${new Date().toISOString()}] Compiling health report...`);
-      const healthReport = this.compileHealthReport(
-        systemMetrics,
-        dockerMetrics,
-        serviceMetrics,
-        healthAnalysis,
-        executionId
-      );
+      for await (const message of claudeQuery) {
+        if (message.type === 'assistant') {
+          const content = message.message.content;
+          
+          // Show tool calls in real time
+          if (Array.isArray(content)) {
+            content.forEach(block => {
+              if (block.type === 'tool_use') {
+                log(`🔧 Running: ${block.name} - ${JSON.stringify(block.input)}`, 'debug');
+              } else if (block.type === 'text' && block.text.trim()) {
+                // Show Claude's analysis as he works
+                const preview = block.text.substring(0, 100) + (block.text.length > 100 ? '...' : '');
+                log(`💭 Claude: ${preview}`);
+              }
+            });
+            
+            result = content.find(block => block.type === 'text')?.text || result;
+          } else if (typeof content === 'string') {
+            result = content;
+            log(`💭 Claude: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+          }
+        } else if (message.type === 'user') {
+          // Show tool results
+          const content = message.message.content;
+          if (Array.isArray(content)) {
+            content.forEach(block => {
+              if (block.type === 'tool_result') {
+                const contentStr = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                const preview = contentStr?.substring(0, 200) + (contentStr && contentStr.length > 200 ? '...' : '');
+                log(`📊 Tool result: ${preview || 'No output'}`);
+              }
+            });
+          }
+        } else if (message.type === 'result') {
+          if (message.subtype === 'success') {
+            totalCost = message.total_cost_usd;
+            totalUsage = {
+              input_tokens: message.usage.input_tokens || 0,
+              output_tokens: message.usage.output_tokens || 0,
+              cache_creation_tokens: message.usage.cache_creation_input_tokens || 0,
+              cache_read_tokens: message.usage.cache_read_input_tokens || 0
+            };
+            log('✅ Claude investigation completed successfully');
+          } else {
+            log('❌ Claude investigation failed', 'error');
+            throw new Error(`Investigation failed: ${message.subtype}`);
+          }
+        }
+      }
 
-      // Calculate execution metrics
       const duration = Date.now() - startTime;
-      logs.push(`[${new Date().toISOString()}] Analysis completed in ${duration}ms`);
-      logs.push(`[${new Date().toISOString()}] Overall health: ${healthReport.overall_health}`);
-      logs.push(`[${new Date().toISOString()}] Health score: ${healthReport.ai_analysis.health_score}/100`);
+      log(`⏱️ Analysis completed in ${(duration / 1000).toFixed(1)}s`);
+      log(`💰 Total cost: $${totalCost.toFixed(4)}`);
 
       return {
         executionId,
         agentType: 'system-health',
         status: 'completed',
-        result: JSON.stringify(healthReport, null, 2),
-        cost: healthReport.cost_breakdown.execution_cost_usd,
+        result,
+        cost: totalCost,
         duration,
-        usage: healthReport.cost_breakdown.tokens_used,
+        usage: totalUsage,
         logs,
         timestamp: new Date().toISOString(),
-        summary: this.generateExecutionSummary(healthReport)
+        summary: `System health investigation completed - Cost: $${totalCost.toFixed(4)}`
       };
 
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       
-      logs.push(`[${new Date().toISOString()}] ERROR: ${errorMessage}`);
+      log(`❌ ERROR: ${errorMessage}`, 'error');
       
       return {
         executionId,
@@ -153,13 +175,98 @@ export class SystemHealthAgent {
     }
   }
 
-  /**
-   * Execute using Claude SDK integration (placeholder for future implementation)
-   */
-  async executeWithSDK(prompt: string, options: AgentExecutionOptions = {}): Promise<AgentResult> {
-    // This will be implemented when Claude SDK integration is available
-    // For now, fallback to local execution
-    return this.execute(options);
+  private buildInvestigationPrompt(options: AgentExecutionOptions): string {
+    const depth = options.ai_analysis_depth || 'detailed';
+    
+    return `
+Please conduct a focused system health investigation and provide a comprehensive analysis report.
+
+INVESTIGATION STRATEGY:
+Start by understanding what problems the system is experiencing, then investigate the metrics:
+
+1. **Check System Logs First**: Start with recent errors and warnings:
+   - Try 'journalctl -p err -n 20 --no-pager' (systemd systems)
+   - If journalctl fails, use 'tail -n 50 /var/log/syslog | grep -E "(error|Error|ERROR|fail|Fail|FAIL)"'
+   - Also check 'dmesg | tail -n 20' for kernel messages
+   - On some systems: 'tail -n 30 /var/log/messages' or '/var/log/kern.log'
+
+2. **Quick System Overview**: Get current resource status:
+   - 'free -h && df -h && uptime'
+   - 'systemctl --failed'
+
+3. **Targeted Investigation**: Based on what you found in logs:
+   - If memory/OOM issues → check memory usage and top processes
+   - If disk issues → investigate disk usage patterns
+   - If service failures → check specific service status and logs
+   - If network/security issues → check ports and updates
+
+4. **Focus on Actionable Problems**: Only dive deep into areas that logs indicate are problematic
+
+ANALYSIS CONFIGURATION:
+- Analysis Depth: ${depth}
+- Include Security Analysis: ${options.include_security_scan ? 'Yes' : 'No'}
+- Include Docker Analysis: ${options.include_docker ? 'Yes' : 'No'}
+- Detailed Service Analysis: ${options.detailed_service_analysis ? 'Yes' : 'No'}
+
+After your investigation, provide:
+1. A comprehensive summary of system health based on your findings
+2. Specific actionable recommendations prioritized by impact and urgency
+3. Analysis of trends and patterns you discovered
+4. Alert identification with severity levels
+5. Health score justification (0-100) based on your investigation
+6. Priority actions that should be taken immediately
+
+Format your final analysis as a structured report with clear sections for:
+- Executive Summary
+- Key Findings
+- Critical Issues (if any)
+- Recommendations (with specific commands)
+- Health Score and Justification
+- Next Steps
+
+Be thorough but practical. Focus on actionable insights and clearly explain the reasoning behind your recommendations.
+`;
+  }
+
+  private getSystemPrompt(): string {
+    return `
+You are an expert system administrator and infrastructure monitoring specialist. You have direct access to system investigation tools and should use them to conduct thorough system health analysis.
+
+INVESTIGATION PRINCIPLES:
+- Always start with broad system overview commands before diving deep
+- Use your judgment to investigate concerning areas more thoroughly
+- Prioritize critical issues that could cause system failures
+- Provide specific, actionable recommendations with exact commands
+- Consider the interconnections between system components
+- Balance thoroughness with practical insights
+
+TOOL USAGE:
+- Use bash commands freely to investigate system state
+- Adapt to different system types (systemd vs SysV init, different distros)
+- If journalctl fails, fall back to /var/log/syslog, /var/log/messages, etc.
+- If systemctl fails, try 'service --status-all' or '/etc/init.d/* status'  
+- Always try alternative commands if the first approach doesn't work
+
+ANALYSIS APPROACH:
+- Look for patterns across CPU, memory, disk, network, and services
+- Identify bottlenecks and resource constraints
+- Detect security vulnerabilities and misconfigurations
+- Assess service health and dependencies
+- Provide context for why issues matter and their potential impact
+
+OUTPUT REQUIREMENTS:
+- Structure findings clearly with sections and bullet points
+- Include specific commands for remediation when possible  
+- Prioritize recommendations by urgency and impact
+- Provide health score with clear justification
+- Focus on actionable insights over raw data
+
+SAFETY:
+- Never run destructive commands
+- Always verify before suggesting system changes
+- Provide clear warnings about potential risks
+- Respect system security boundaries
+`;
   }
 
   /**
@@ -167,185 +274,27 @@ export class SystemHealthAgent {
    */
   getCapabilities(): Record<string, any> {
     return {
-      name: 'System Health Reporter',
-      version: '1.0.0',
-      description: 'Comprehensive system health monitoring and analysis agent',
+      name: 'System Health Reporter (Claude SDK)',
+      version: '2.0.0',
+      description: 'Direct system health investigation using Claude Code SDK',
       capabilities: [
-        'CPU, Memory, Disk, Network monitoring',
+        'Direct system investigation with bash commands',
+        'Real-time system analysis and troubleshooting',
+        'Security vulnerability detection',
+        'Performance bottleneck identification',
+        'Service health assessment',
         'Docker container analysis',
-        'System service health checks',
-        'Security vulnerability scanning',
-        'AI-powered trend analysis',
-        'Predictive health insights',
-        'Automated recommendations'
+        'Intelligent recommendations with specific commands'
       ],
-      estimated_cost_per_run: 0.05,
-      typical_execution_time_ms: 60000,
+      provides_exact_costs: true,
+      typical_execution_time_ms: 120000,
       outputs: [
-        'System metrics',
-        'Health score (0-100)',
-        'AI analysis and recommendations',
-        'Security audit results',
-        'Performance trends',
-        'Critical alerts'
+        'Comprehensive system analysis report',
+        'Actionable recommendations with commands',
+        'Health score with justification',
+        'Priority action items',
+        'Security findings'
       ]
     };
-  }
-
-  // Private methods
-
-  private async collectSystemMetrics(logs: string[]): Promise<SystemCollectorResult> {
-    try {
-      const metrics = await this.systemCollector.collectSystemInfo();
-      logs.push(`[${new Date().toISOString()}] System metrics collected: CPU ${metrics.cpu.usage_percent.toFixed(1)}%, Memory ${metrics.memory.usage_percent.toFixed(1)}%, Disk ${metrics.disk.usage_percent.toFixed(1)}%`);
-      return metrics;
-    } catch (error) {
-      const errorMsg = `Failed to collect system metrics: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      logs.push(`[${new Date().toISOString()}] ERROR: ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-  }
-
-  private async collectDockerMetrics(logs: string[]): Promise<DockerCollectorResult> {
-    try {
-      const dockerInfo = await this.dockerCollector.collectDockerInfo();
-      if (dockerInfo.available && dockerInfo.metrics) {
-        logs.push(`[${new Date().toISOString()}] Docker metrics collected: ${dockerInfo.metrics.total_containers} containers (${dockerInfo.metrics.running_containers} running)`);
-      } else {
-        logs.push(`[${new Date().toISOString()}] Docker not available or accessible`);
-      }
-      return dockerInfo;
-    } catch (error) {
-      const errorMsg = `Failed to collect Docker metrics: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      logs.push(`[${new Date().toISOString()}] WARNING: ${errorMsg}`);
-      
-      return {
-        available: false,
-        error: errorMsg,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-
-  private async collectServiceMetrics(logs: string[]): Promise<ServiceCollectorResult> {
-    try {
-      const serviceInfo = await this.serviceCollector.collectServiceHealth();
-      logs.push(`[${new Date().toISOString()}] Service metrics collected: ${serviceInfo.system_services_count} total services (${serviceInfo.failed_services_count} failed)`);
-      return serviceInfo;
-    } catch (error) {
-      const errorMsg = `Failed to collect service metrics: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      logs.push(`[${new Date().toISOString()}] ERROR: ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-  }
-
-  private compileHealthReport(
-    systemMetrics: SystemCollectorResult,
-    dockerMetrics: DockerCollectorResult | undefined,
-    serviceMetrics: ServiceCollectorResult,
-    healthAnalysis: any,
-    executionId: string
-  ): SystemHealthData {
-    return {
-      timestamp: new Date().toISOString(),
-      overall_health: healthAnalysis.overall_health || 'warning',
-      metrics: {
-        cpu_usage: systemMetrics.cpu,
-        memory_usage: systemMetrics.memory,
-        disk_usage: systemMetrics.disk,
-        network: systemMetrics.network,
-        services: serviceMetrics.services,
-        security: systemMetrics.security,
-        docker_containers: dockerMetrics?.metrics
-      },
-      ai_analysis: healthAnalysis.ai_analysis || {
-        summary: 'System analysis completed',
-        recommendations: [],
-        trends: [],
-        alerts: [],
-        health_score: 85,
-        priority_actions: []
-      },
-      cost_breakdown: {
-        execution_cost_usd: healthAnalysis.cost || 0.00,
-        tokens_used: healthAnalysis.usage || {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_tokens: 0,
-          cache_read_tokens: 0
-        },
-        model_used: healthAnalysis.model_used || 'claude-3-5-sonnet-20241022',
-        execution_duration_ms: healthAnalysis.duration || 0,
-        cost_per_minute_usd: 0.001
-      }
-    };
-  }
-
-  private generateExecutionSummary(healthReport: SystemHealthData): string {
-    const health = healthReport.overall_health;
-    const score = healthReport.ai_analysis.health_score;
-    const alertCount = healthReport.ai_analysis.alerts.length;
-    const recommendationCount = healthReport.ai_analysis.recommendations.length;
-    
-    return `System Health: ${health.toUpperCase()} (${score}/100) - ${alertCount} alerts, ${recommendationCount} recommendations`;
-  }
-
-  private buildAnalysisPrompt(userPrompt: string, options: AgentExecutionOptions): string {
-    return `
-System Health Analysis Request:
-${userPrompt}
-
-Analysis Configuration:
-- Include Docker: ${options.include_docker ? 'Yes' : 'No'}
-- Include Security Scan: ${options.include_security_scan ? 'Yes' : 'No'}
-- Service Analysis: ${options.detailed_service_analysis ? 'Detailed' : 'Basic'}
-- AI Analysis Depth: ${options.ai_analysis_depth || 'detailed'}
-
-Please perform a comprehensive system health analysis and provide:
-1. Current system metrics and status
-2. Health assessment with scoring
-3. Actionable recommendations
-4. Trend analysis where applicable
-5. Priority alerts and warnings
-
-Focus on actionable insights and clearly prioritize any critical issues.
-`;
-  }
-
-  private getSystemPrompt(): string {
-    return `
-You are a System Health Reporter agent specializing in comprehensive system monitoring and analysis. Your capabilities include:
-
-TECHNICAL EXPERTISE:
-- System resource monitoring (CPU, memory, disk, network)
-- Docker container ecosystem analysis  
-- System service health assessment
-- Security vulnerability detection
-- Performance trend analysis
-- Predictive maintenance insights
-
-ANALYSIS APPROACH:
-- Collect comprehensive system metrics
-- Identify performance bottlenecks and resource constraints
-- Detect security vulnerabilities and configuration issues
-- Analyze service dependencies and failure patterns
-- Provide actionable, prioritized recommendations
-- Calculate health scores based on multiple factors
-
-OUTPUT REQUIREMENTS:
-- Always provide structured, actionable findings
-- Prioritize critical issues requiring immediate attention
-- Include specific commands/steps for issue resolution
-- Provide context for recommendations (why they matter)
-- Use clear severity levels (info, warning, error, critical)
-- Include estimated impact and implementation difficulty
-
-SAFETY GUIDELINES:
-- Never execute destructive commands
-- Always verify system state before recommendations
-- Provide rollback plans for significant changes
-- Highlight potential risks of recommended actions
-- Respect system security and access boundaries
-`;
   }
 }
