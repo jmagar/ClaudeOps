@@ -18,11 +18,19 @@ async function runAgent() {
   const agentType: AgentType = process.argv[2] as AgentType;
   const serviceName = process.argv[3];
   
+  // 1. Add agentType validation (lines 16-24)
+  const availableTypes = AgentFactory.getAvailableTypes();
+  if (!availableTypes.includes(agentType)) {
+    console.error(`❌ Invalid agent type: '${agentType}'`);
+    console.error(`Supported agents: ${availableTypes.join(', ')}`);
+    process.exit(1);
+  }
+  
   console.log(`🔍 Starting ${agentType} agent...\n`);
   
-  const agent = AgentFactory.create(agentType);
-  
   try {
+    // 2. Move factory create inside try block (lines 23-26)
+    const agent = AgentFactory.create(agentType);
     // Build options based on agent type
     const options: RunnerAgentOptions = {
       timeout_ms: 300000, // 5 minutes
@@ -36,7 +44,22 @@ async function runAgent() {
         console.log('Example: npx tsx runner.ts docker-deployment jellyfin');
         process.exit(1);
       }
-      options.serviceName = serviceName;
+      
+      // 3. Add serviceName validation (lines 33-43)
+      const serviceNamePattern = /^[a-z0-9][a-z0-9._-]{0,62}$/;
+      if (!serviceNamePattern.test(serviceName)) {
+        console.error(`❌ Invalid service name: '${serviceName}'`);
+        console.error('Service name must:');
+        console.error('- Start with alphanumeric character');
+        console.error('- Contain only lowercase letters, digits, dots, underscores, hyphens');
+        console.error('- Be 1-63 characters long');
+        console.error('Example: jellyfin, nginx-proxy, api.service');
+        process.exit(1);
+      }
+      
+      // Normalize to lowercase
+      const normalizedServiceName = serviceName.toLowerCase();
+      options.serviceName = normalizedServiceName;
       options.environment = 'production';
       options.enableSSL = true;
       options.generateCredentials = true;
@@ -146,10 +169,20 @@ async function runAgent() {
 // Global AbortController for signal handling
 let globalController: AbortController | null = null;
 
+// 4. Add fallback timer to signal handlers (lines 149-161)
 process.on('SIGINT', () => {
   console.log('\n⚠️  Agent execution interrupted');
   if (globalController) {
     globalController.abort();
+    
+    // Start fallback timer
+    const fallbackTimer = setTimeout(() => {
+      console.log('\n⚠️  Force exit after timeout');
+      process.exit(1);
+    }, 4000); // 4 second fallback
+    
+    // Clear timer if abort completes normally
+    fallbackTimer.unref();
   }
 });
 
@@ -157,6 +190,15 @@ process.on('SIGTERM', () => {
   console.log('\n⚠️  Agent execution terminated');
   if (globalController) {
     globalController.abort();
+    
+    // Start fallback timer
+    const fallbackTimer = setTimeout(() => {
+      console.log('\n⚠️  Force exit after timeout');
+      process.exit(1);
+    }, 4000); // 4 second fallback
+    
+    // Clear timer if abort completes normally
+    fallbackTimer.unref();
   }
 });
 
@@ -177,6 +219,17 @@ function getAgentDescription(type: string): string {
 // Show usage if no agent type specified
 if (!process.argv[2]) {
   const availableAgents = AgentFactory.getAvailableTypes();
+  
+  // 5. Guard against empty availableAgents (lines 177-189)
+  if (availableAgents.length === 0) {
+    console.log('Usage: npx tsx runner.ts <agent-type> [options]');
+    console.log('\n❌ No agents available');
+    console.log('\nExample usage:');
+    console.log('  npx tsx runner.ts system-health');
+    console.log('  npx tsx runner.ts docker-deployment <service-name>');
+    process.exit(0);
+  }
+  
   console.log('Usage: npx tsx runner.ts <agent-type> [options]');
   console.log('\nAvailable agents:');
   availableAgents.forEach(type => {

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "next build && tsc -p tsconfig.server.json",
-    "start": "node server.js",
+    "start": "node dist/server.js",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "clean": "rimraf .next dist",

@@ -1,4 +1,4 @@
-import { createServer } from 'http';
+import { createServer, IncomingMessage } from 'http';
 import next from 'next';
 import { WebSocketServer } from 'ws';
 import { WebSocketManager, setWebSocketManager } from './src/lib/websocket/server';
@@ -40,6 +40,16 @@ app.prepare().then(() => {
     handle(req, res, parsedUrl);
   });
 
+  // Configure HTTP server timeouts to prevent slowloris attacks
+  server.timeout = 120000; // 2 minutes
+  server.headersTimeout = 60000; // 1 minute
+  server.keepAliveTimeout = 5000; // 5 seconds
+
+  // Set per-socket timeouts
+  server.on('connection', (socket) => {
+    socket.setTimeout(120000); // 2 minutes per socket
+  });
+
   // Handle server errors
   server.on('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
@@ -67,12 +77,56 @@ app.prepare().then(() => {
     return parsed;
   };
   
+  // Parse allowed WebSocket origins
+  const parseAllowedOrigins = (value: string | undefined): string[] => {
+    if (!value) return [];
+    return value.split(',').map(origin => origin.trim()).filter(Boolean);
+  };
+
+  const allowedOrigins = parseAllowedOrigins(process.env.WS_ALLOWED_ORIGINS);
+
+  // WebSocket origin validation function
+  const verifyClient = (info: { origin: string; secure: boolean; req: IncomingMessage }): boolean => {
+    const { origin, req } = info;
+    
+    // In development, allow localhost connections
+    if (process.env.NODE_ENV !== 'production') {
+      return true;
+    }
+
+    // Check if origin is in allowed list
+    if (allowedOrigins.length > 0) {
+      const isAllowed = allowedOrigins.some(allowedOrigin => {
+        try {
+          const originUrl = new URL(origin);
+          const allowedUrl = new URL(allowedOrigin);
+          return originUrl.hostname === allowedUrl.hostname && 
+                 originUrl.port === allowedUrl.port &&
+                 originUrl.protocol === allowedUrl.protocol;
+        } catch {
+          return origin === allowedOrigin;
+        }
+      });
+
+      if (!isAllowed) {
+        console.warn(`Rejected WebSocket connection from unauthorized origin: ${origin}`);
+        return false;
+      }
+    }
+
+    // Additional server-side auth check could go here
+    // For now, we'll rely on the origin validation
+    
+    return true;
+  };
+
   const maxPayload = parseMaxPayload(process.env.WS_MAX_PAYLOAD);
   const wss = new WebSocketServer({ 
     server,
     path: '/api/ws',
     clientTracking: true,
     maxPayload,
+    verifyClient,
     perMessageDeflate: {
       threshold: 1024,
       concurrencyLimit: 10,
