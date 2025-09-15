@@ -1,4 +1,17 @@
-import { AgentFactory, AgentUtils } from './src/lib/agents';
+import { AgentFactory } from './src/lib/agents';
+
+interface AgentOptions {
+  timeoutMs: number;
+  serviceName?: string;
+  environment?: string;
+  enableSSL?: boolean;
+  generateCredentials?: boolean;
+  includeDocker?: boolean;
+  includeSecurityScan?: boolean;
+  detailedServiceAnalysis?: boolean;
+  aiAnalysisDepth?: string;
+  onLog?: (message: string, level?: string) => void;
+}
 
 async function runAgent() {
   // Get agent type from command line or default to system-health
@@ -11,8 +24,8 @@ async function runAgent() {
   
   try {
     // Build options based on agent type
-    let options: any = {
-      timeout_ms: 300000, // 5 minutes
+    const options: AgentOptions = {
+      timeoutMs: 300000, // 5 minutes
     };
     
     // Add agent-specific options
@@ -28,19 +41,22 @@ async function runAgent() {
       options.enableSSL = true;
       options.generateCredentials = true;
     } else if (agentType === 'system-health') {
-      options.include_docker = true;
-      options.include_security_scan = true;
-      options.detailed_service_analysis = true;
-      options.ai_analysis_depth = 'detailed';
+      options.includeDocker = true;
+      options.includeSecurityScan = true;
+      options.detailedServiceAnalysis = true;
+      options.aiAnalysisDepth = 'detailed';
     }
     
     // Add logging callbacks
     options.onLog = (message, level) => {
+      if (typeof message !== 'string') return;
       // Show errors and warnings prominently
       if (level === 'error') {
         console.error(`❌ ${message}`);
       } else if (level === 'warn') {
         console.warn(`⚠️  ${message}`);
+      } else if (level === 'debug') {
+        console.debug(`🔎 ${message}`);
       } else if (agentType === 'docker-deployment') {
         // Special logging for docker deployment to show parallel execution
         if (message.includes('🚀') || message.includes('📊') || message.includes('⚙️') || message.includes('🔍')) {
@@ -55,14 +71,14 @@ async function runAgent() {
         console.log(message);
       } else if (message.includes('🔧 Running:')) {
         // Show tool execution in simplified format
-        const toolMatch = message.match(/🔧 Running: (\w+)/);
+        const toolMatch = message.match(/🔧 Running:\s*([A-Za-z0-9_-]+)/);
         if (toolMatch) {
           console.log(`  → Executing ${toolMatch[1]}...`);
         }
       } else if (message.includes('📊 Tool result:')) {
         // Show condensed tool results
-        const result = message.replace('📊 Tool result: ', '');
-        console.log(`  ✓ ${result.substring(0, 200)}${result.length > 200 ? '...' : ''}`);
+        const toolResult = message.replace('📊 Tool result: ', '');
+        console.log(`  ✓ ${toolResult.substring(0, 200)}${toolResult.length > 200 ? '...' : ''}`);
       }
       // Skip other debug/info logs for cleaner output
     };
@@ -76,14 +92,32 @@ async function runAgent() {
       console.log('='.repeat(80));
       console.log(`📊 ${agentType.toUpperCase()} REPORT - ${new Date().toLocaleString()}`);
       console.log('='.repeat(80));
-      console.log(`💰 Analysis Cost: $${result.cost.toFixed(4)}`);
-      console.log(`⏱️  Duration: ${(result.duration / 1000).toFixed(2)}s`);
-      console.log(`🔧 Tokens: ${result.usage.input_tokens} input / ${result.usage.output_tokens} output`);
+      const cost = typeof result.cost === 'number' ? result.cost : 0;
+      console.log(`💰 Analysis Cost: $${cost.toFixed(4)}`);
+      const durationSec = typeof result.duration === 'number' ? (result.duration / 1000).toFixed(2) : 'N/A';
+      console.log(`⏱️  Duration: ${durationSec}s`);
+      const input = result.usage?.input_tokens ?? 0;
+      const output = result.usage?.output_tokens ?? 0;
+      console.log(`🔧 Tokens: ${input} input / ${output} output`);
       console.log('='.repeat(80));
       console.log();
       
-      // Show Claude's analysis report directly
-      console.log(result.result);
+      // Robustly print the analysis report
+      let analysisOutput: string;
+      if (result.result == null) {
+        analysisOutput = '[No result returned]';
+      } else if (Buffer.isBuffer(result.result) || result.result instanceof Uint8Array) {
+        analysisOutput = Buffer.from(result.result).toString('utf-8');
+      } else if (typeof result.result === 'object') {
+        try {
+          analysisOutput = JSON.stringify(result.result, null, 2);
+        } catch (e) {
+          analysisOutput = String(result.result);
+        }
+      } else {
+        analysisOutput = String(result.result);
+      }
+      console.log(analysisOutput);
       console.log();
       console.log('='.repeat(80));
 
@@ -95,7 +129,7 @@ async function runAgent() {
       console.error('Error:', result.error);
       console.log('\n📋 Execution Logs:');
       console.log('-'.repeat(50));
-      result.logs.forEach(log => console.log(log));
+      (Array.isArray(result.logs) ? result.logs : []).forEach(log => console.log(log));
     }
     
   } catch (error) {
@@ -115,15 +149,31 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+function getAgentDescription(type: string): string {
+  const descriptions: Record<string, string> = {
+    'system-health': 'System health analysis',
+    'docker-deployment': 'Deploy Docker services (requires service name)',
+    'infrastructure-analysis': 'Infrastructure analysis',
+    'service-research': 'Service research',
+    'config-generator': 'Configuration generator',
+    'security-credentials': 'Security credentials management',
+    'deployment-executor': 'Deployment executor',
+    'verification': 'Verification agent'
+  };
+  return descriptions[type] || 'Agent for specialized tasks';
+}
+
 // Show usage if no agent type specified
 if (!process.argv[2]) {
+  const availableAgents = AgentFactory.getAvailableTypes();
   console.log('Usage: npx tsx runner.ts <agent-type> [options]');
   console.log('\nAvailable agents:');
-  console.log('  system-health         - System health analysis');
-  console.log('  docker-deployment     - Deploy Docker services (requires service name)');
+  availableAgents.forEach(type => {
+    console.log(`  ${type.padEnd(24)} - ${getAgentDescription(type)}`);
+  });
   console.log('\nExamples:');
-  console.log('  npx tsx runner.ts system-health');
-  console.log('  npx tsx runner.ts docker-deployment jellyfin');
+  console.log(`  npx tsx runner.ts ${availableAgents[0]}`);
+  console.log(`  npx tsx runner.ts docker-deployment jellyfin`);
   process.exit(0);
 }
 

@@ -157,6 +157,8 @@ export class DockerDeploymentAgent extends BaseAgent<DockerDeploymentOptions> {
       
       // Phase 4: Verification
       logs.push('🔍 Phase 4: Deployment verification...');
+      if (options.onLog) options.onLog('🔍 Phase 4: Deployment verification...', 'info');
+      
       const verifyResult = await new VerificationAgent().execute({
         serviceName: options.serviceName,
         deployment: deployResult.result,
@@ -164,7 +166,9 @@ export class DockerDeploymentAgent extends BaseAgent<DockerDeploymentOptions> {
         performanceTest: options.environment === 'production',
         securityScan: options.securityScanEnabled !== false,
         timeout_ms: 120000,
-        maxTurns: 30
+        maxTurns: 30,
+        onLog: options.onLog ? (msg, level) => options.onLog!(`[Verify] ${msg}`, level) : undefined,
+        onProgress: options.onProgress
       });
       
       logs.push(`✅ Verification completed with status: ${verifyResult.status} (Cost: $${verifyResult.cost.toFixed(4)})`);

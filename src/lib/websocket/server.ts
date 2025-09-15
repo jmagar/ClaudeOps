@@ -72,9 +72,6 @@ export class WebSocketManager {
       console.log('WebSocket server closed');
     });
 
-    // Handle server-level events
-    process.on('SIGTERM', () => this.shutdown());
-    process.on('SIGINT', () => this.shutdown());
   }
 
   /**

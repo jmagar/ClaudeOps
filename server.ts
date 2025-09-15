@@ -1,12 +1,11 @@
 import { createServer } from 'http';
-import { parse } from 'url';
 import next from 'next';
 import { WebSocketServer } from 'ws';
 import { WebSocketManager, setWebSocketManager } from './src/lib/websocket/server';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || process.env.HOST || '0.0.0.0';
-const port = process.env.PORT ? parseInt(process.env.PORT) : 3010;
+const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 // Initialize Next.js application
 const app = next({ dev, hostname, port });
@@ -14,8 +13,35 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const server = createServer((req, res) => {
-    const parsedUrl = parse(req.url || '/', true);
-    handle(req, res, parsedUrl);
+    const url = new URL(req.url || '/', `http://${req.headers.host || hostname}`);
+    handle(req, res, {
+      pathname: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+      search: url.search,
+      hash: url.hash,
+      href: url.href,
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port,
+      host: url.host,
+      slashes: true,
+      auth: null,
+      path: url.pathname + url.search
+    });
+  });
+
+  // Handle server errors
+  server.on('error', (error: any) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${port} is already in use. Please free the port or use a different one.`);
+      process.exit(1);
+    } else if (error.code === 'EACCES') {
+      console.error(`❌ Permission denied to bind to port ${port}. Try a port number above 1024.`);
+      process.exit(1);
+    } else {
+      console.error('❌ Server error:', error.message);
+      process.exit(1);
+    }
   });
 
   // Create WebSocket server
@@ -23,9 +49,12 @@ app.prepare().then(() => {
     server,
     path: '/api/ws',
     clientTracking: true,
+    maxPayload: 64 * 1024, // 64KB max message size
     perMessageDeflate: {
       threshold: 1024,
       concurrencyLimit: 10,
+      serverNoContextTakeover: true,
+      clientNoContextTakeover: true,
       zlibDeflateOptions: {
         level: 6
       },
@@ -70,6 +99,6 @@ app.prepare().then(() => {
     }
   };
 
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
 });

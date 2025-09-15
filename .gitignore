@@ -121,3 +121,7 @@ Thumbs.db
 
 # Local development files
 *.local
+
+# Backup and data directories
+backups/
+data/
