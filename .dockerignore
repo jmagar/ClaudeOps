@@ -159,8 +159,9 @@ cypress/
 
 # TypeScript
 *.tsbuildinfo
-tsconfig.json
-tsconfig*.json
+# tsconfig files needed for Docker build
+# tsconfig.json
+# tsconfig*.json
 
 # Monitoring and scripts (will be copied separately if needed)
 monitoring/

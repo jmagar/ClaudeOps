@@ -5,9 +5,8 @@ import {
   handleAsyncOperation, 
   validateRequestBody,
   validateQueryParams,
-  NotFoundError
+  ValidationError
 } from '@/lib/middleware/errorHandler';
-import { ValidationError } from '@/lib/types/database';
 import { 
   UpdateExecutionSchema,
   ExecutionDetailQuerySchema,
@@ -55,9 +54,9 @@ export const PUT = withErrorHandler<Execution>(
     // Handle logs and aiAnalysis: only stringify if they're not already strings
     const updateData = {
       ...validatedData,
-      logs: validatedData.logs || (body.logs !== undefined ? 
+      logs: validatedData.logs ?? (body.logs !== undefined ? 
         (typeof body.logs === 'string' ? body.logs : JSON.stringify(body.logs)) : undefined),
-      aiAnalysis: validatedData.aiAnalysis || (body.aiAnalysis !== undefined ? 
+      aiAnalysis: validatedData.aiAnalysis ?? (body.aiAnalysis !== undefined ? 
         (typeof body.aiAnalysis === 'string' ? body.aiAnalysis : JSON.stringify(body.aiAnalysis)) : undefined)
     };
     

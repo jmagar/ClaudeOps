@@ -18,6 +18,26 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# numfmt fallback function for systems that don't have it
+format_bytes() {
+    local bytes=$1
+    local size_names=("B" "KB" "MB" "GB" "TB")
+    local i=0
+    local result
+    
+    if command -v numfmt >/dev/null 2>&1; then
+        numfmt --to=iec-i --suffix=B --format=%.1f "$bytes"
+    else
+        # Simple fallback implementation
+        result=$(echo "$bytes")
+        while [ "$result" -gt 1024 ] && [ $i -lt 4 ]; do
+            result=$((result / 1024))
+            i=$((i + 1))
+        done
+        echo "${result}.0${size_names[$i]}"
+    fi
+}
+
 # Logging function
 log() {
     local level
@@ -98,7 +118,7 @@ perform_backup() {
                 # Calculate and log backup size
                 local backup_size
                 backup_size=$(stat -f%z "$backup_compressed" 2>/dev/null || stat -c%s "$backup_compressed")
-                log INFO "Backup size: $(numfmt --to=iec-i --suffix=B --format=%.1f "$backup_size")"
+                log INFO "Backup size: $(format_bytes "$backup_size")"
                 
                 return 0
             else
@@ -138,7 +158,7 @@ cleanup_old_backups() {
     
     if [ $deleted_count -gt 0 ]; then
         local size_freed_human
-        size_freed_human="$(numfmt --to=iec-i --suffix=B --format=%.1f "$total_size_freed")"
+        size_freed_human="$(format_bytes "$total_size_freed")"
         log INFO "Cleanup completed: deleted $deleted_count files, freed $size_freed_human"
     else
         log INFO "Cleanup completed: no old backups found"
@@ -161,7 +181,7 @@ generate_backup_report() {
     done < <(find "$BACKUP_PATH" -name "${DB_FILE%.db}_*.db.gz" -type f -print0 2>/dev/null)
     
     local total_size_human
-    total_size_human="$(numfmt --to=iec-i --suffix=B --format=%.1f "$total_size")"
+    total_size_human="$(format_bytes "$total_size")"
     
     log INFO "Backup Report:"
     log INFO "  - Total backups: $backup_count"
@@ -186,7 +206,7 @@ health_check() {
     local required_space=1048576  # 1GB in KB
     
     if [ "$available_space" -lt "$required_space" ]; then
-        log WARN "Low disk space: $(numfmt --to=iec-i --suffix=B --from-unit=1024 --format=%.1f "$available_space") available"
+        log WARN "Low disk space: $(format_bytes $((available_space * 1024))) available"
     fi
     
     return 0

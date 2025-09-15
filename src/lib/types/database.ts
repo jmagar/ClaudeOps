@@ -70,6 +70,7 @@ export interface MetricsFilter {
   dateTo?: Date;
   healthStatus?: SystemHealthStatus;
   limit?: number;
+  offset?: number;
 }
 
 // Aggregation Types

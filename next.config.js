@@ -25,11 +25,11 @@ const nextConfig = {
     ignoreDuringBuilds: false,
   },
   
-  // Environment variables
-  env: {
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-    WEBSOCKET_PORT: process.env.WEBSOCKET_PORT,
-  },
+  // Environment variables - only public variables should be bundled
+  // env: {
+  //   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  //   WEBSOCKET_PORT: process.env.WEBSOCKET_PORT, // Non-public variable, should not be bundled
+  // },
   
   // Output configuration for Docker
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,

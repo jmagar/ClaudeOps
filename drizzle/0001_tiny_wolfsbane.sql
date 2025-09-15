@@ -61,7 +61,7 @@ CREATE TABLE `schedules` (
 	`agent_type` text NOT NULL,
 	`cron_expression` text NOT NULL,
 	`timezone` text DEFAULT 'UTC' NOT NULL,
-	`enabled` integer DEFAULT true NOT NULL,
+	`enabled` integer DEFAULT 1 NOT NULL CHECK (`enabled` IN (0,1)),
 	`next_run` text,
 	`last_run` text,
 	`node_ids` text,
@@ -83,8 +83,8 @@ CREATE TABLE `app_settings` (
 	`description` text,
 	`value_type` text DEFAULT 'string' NOT NULL,
 	`category` text DEFAULT 'general' NOT NULL,
-	`is_secret` integer DEFAULT false NOT NULL,
-	`is_readonly` integer DEFAULT false NOT NULL,
+	`is_secret` integer DEFAULT 0 NOT NULL CHECK (`is_secret` IN (0,1)),
+	`is_readonly` integer DEFAULT 0 NOT NULL CHECK (`is_readonly` IN (0,1)),
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL
 );
@@ -105,7 +105,7 @@ CREATE TABLE `system_metrics` (
 	`disk_total_bytes` integer DEFAULT 0 CHECK (disk_total_bytes >= 0),
 	`internet_connected` integer DEFAULT 0 CHECK (internet_connected IN (0,1)),
 	`claude_api_latency_ms` integer DEFAULT 0 CHECK (claude_api_latency_ms >= 0),
-	`overall_health` text DEFAULT 'healthy' NOT NULL CHECK (overall_health IN ('healthy','degraded','unhealthy')),
+	`overall_health` text DEFAULT 'healthy' NOT NULL CHECK (overall_health IN ('healthy','warning','critical')),
 	`timestamp` text DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 --> statement-breakpoint

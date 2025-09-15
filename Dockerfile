@@ -18,17 +18,14 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY tsconfig.json ./
-
-# Install dependencies
-RUN npm ci --omit=dev --ignore-scripts && \
-    npm cache clean --force
+COPY tsconfig*.json ./
 
 # Stage 2: Build stage
 FROM base AS build
 
 # Install all dependencies including dev dependencies
-RUN npm ci --ignore-scripts
+RUN npm ci && \
+    npm rebuild better-sqlite3 --build-from-source
 
 # Copy source code
 COPY . .

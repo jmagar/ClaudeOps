@@ -1,5 +1,4 @@
 import { SystemHealthAgent } from './src/lib/agents/systemHealthAgent';
-import type { ServiceStatus, Alert, Recommendation } from './src/lib/types/agent';
 
 async function runHealthCheck() {
   console.log('🔍 Starting system health analysis...\n');
@@ -14,9 +13,26 @@ async function runHealthCheck() {
       ai_analysis_depth: 'detailed',
       timeout_ms: 300000, // 5 minutes
       onLog: (message, level) => {
-        const timestamp = new Date().toLocaleTimeString();
-        const levelIcon = level === 'error' ? '❌' : level === 'warning' ? '⚠️' : level === 'success' ? '✅' : 'ℹ️';
-        console.log(`[${timestamp}] ${levelIcon} ${message}`);
+        // Show errors and warnings prominently
+        if (level === 'error') {
+          console.error(`❌ ${message}`);
+        } else if (level === 'warn') {
+          console.warn(`⚠️  ${message}`);
+        } else if (message.includes('💭 Claude:')) {
+          // Show Claude's full thinking without extra formatting
+          console.log(message);
+        } else if (message.includes('🔧 Running:')) {
+          // Show tool execution in simplified format
+          const toolMatch = message.match(/🔧 Running: (\w+)/);
+          if (toolMatch) {
+            console.log(`  → Executing ${toolMatch[1]}...`);
+          }
+        } else if (message.includes('📊 Tool result:')) {
+          // Show condensed tool results
+          const result = message.replace('📊 Tool result: ', '');
+          console.log(`  ✓ ${result.substring(0, 200)}${result.length > 200 ? '...' : ''}`);
+        }
+        // Skip other debug/info logs for cleaner output
       }
     });
     

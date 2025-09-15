@@ -5,6 +5,7 @@
 [production]
 Chrome >= 120
 Safari >= 16.4
+ios_saf >= 16.4
 Firefox >= 128
 Edge >= 120
 
@@ -12,6 +13,7 @@ Edge >= 120
 [development]
 Chrome >= 120
 Safari >= 16.4
+ios_saf >= 16.4
 Firefox >= 128
 Edge >= 120
-last 1 version
+# last 1 version removed to maintain consistency with production targets

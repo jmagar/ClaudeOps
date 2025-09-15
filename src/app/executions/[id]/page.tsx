@@ -1,3 +1,5 @@
+'use client';
+
 import { notFound } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
@@ -85,7 +87,8 @@ function ExecutionDetailSkeleton() {
 
 // Dynamically import ExecutionDetail with loading skeleton
 const ExecutionDetail = dynamic(() => import('@/components/executions/ExecutionDetail'), {
-  loading: () => <ExecutionDetailSkeleton />
+  loading: () => <ExecutionDetailSkeleton />,
+  ssr: false,
 });
 
 // Validate execution ID format
@@ -109,14 +112,4 @@ export default function ExecutionPage({ params }: ExecutionPageProps) {
       <ExecutionDetail executionId={id} />
     </div>
   );
-}
-
-// Generate metadata for the page
-export function generateMetadata({ params }: ExecutionPageProps) {
-  const { id } = params;
-  
-  return {
-    title: `Execution ${id.substring(0, 8)} - ClaudeOps`,
-    description: `View details, logs, and progress for execution ${id}`,
-  };
 }

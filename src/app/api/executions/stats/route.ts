@@ -22,16 +22,29 @@ export const GET = withErrorHandler<ExecutionStats & { trends?: ExecutionTrends 
     const searchParams = req.nextUrl.searchParams;
     const includeTrends = searchParams.get('includeTrends') !== 'false'; // default to true
     
-    return handleAsyncOperation(async () => {
+    return handleAsyncOperation<ExecutionStats & { trends?: ExecutionTrends }>(async () => {
       if (includeTrends) {
         // Fetch stats and trends in parallel
         const [stats, trends] = await Promise.all([
           executionService.getExecutionStats(),
           executionService.getExecutionTrends()
         ]);
-        return { ...stats, trends };
+        
+        // Unwrap the stats from the service response
+        const statsData = stats.success ? stats.data : undefined;
+        const trendsData = trends.success ? trends.data : undefined;
+        
+        if (!statsData) {
+          return { success: false, error: stats.error || 'Failed to fetch stats' };
+        }
+        
+        return { success: true, data: { ...statsData, trends: trendsData } };
       } else {
-        return await executionService.getExecutionStats();
+        const statsResult = await executionService.getExecutionStats();
+        if (!statsResult.success) {
+          return { success: false, error: statsResult.error || 'Failed to fetch stats' };
+        }
+        return { success: true, data: statsResult.data };
       }
     });
   }
