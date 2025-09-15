@@ -17,27 +17,15 @@ app.prepare().then(() => {
     
     // Preserve multi-value query parameters
     const query: Record<string, string | string[]> = {};
-    url.searchParams.forEach((value, key) => {
-      if (query[key]) {
-        // Convert to array if not already, then add value
-        if (Array.isArray(query[key])) {
-          (query[key] as string[]).push(value);
-        } else {
-          query[key] = [query[key] as string, value];
-        }
-      } else {
-        query[key] = value;
-      }
-    });
+    for (const key of Array.from(new Set(url.searchParams.keys()))) {
+      const values = url.searchParams.getAll(key);
+      query[key] = values.length > 1 ? values : values[0];
+    }
     
     const parsedUrl = {
       pathname: url.pathname,
       query,
-      search: url.search
-    };
-    
-    handle(req, res, {
-      ...parsedUrl,
+      search: url.search,
       hash: url.hash,
       href: url.href,
       protocol: url.protocol,
@@ -47,25 +35,39 @@ app.prepare().then(() => {
       slashes: true,
       auth: null,
       path: url.pathname + url.search
-    } as any);
+    };
+    
+    handle(req, res, parsedUrl);
   });
 
   // Handle server errors
-  server.on('error', (error: NodeJS.ErrnoException | null) => {
-    if (error?.code === 'EADDRINUSE') {
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
       console.error(`❌ Port ${port} is already in use. Please free the port or use a different one.`);
       process.exit(1);
-    } else if (error?.code === 'EACCES') {
+    } else if (error.code === 'EACCES') {
       console.error(`❌ Permission denied to bind to port ${port}. Try a port number above 1024.`);
       process.exit(1);
     } else {
-      console.error('❌ Server error:', error?.message);
+      console.error('❌ Server error:', error.message);
       process.exit(1);
     }
   });
 
   // Create WebSocket server
-  const maxPayload = parseInt(process.env.WS_MAX_PAYLOAD || '1048576', 10); // 1MB default
+  const parseMaxPayload = (value: string | undefined): number => {
+    const defaultValue = 1048576; // 1MB
+    if (!value) return defaultValue;
+    
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed <= 0 || parsed > 100 * 1024 * 1024) { // Max 100MB
+      console.warn(`Invalid WS_MAX_PAYLOAD: ${value}, using default: ${defaultValue}`);
+      return defaultValue;
+    }
+    return parsed;
+  };
+  
+  const maxPayload = parseMaxPayload(process.env.WS_MAX_PAYLOAD);
   const wss = new WebSocketServer({ 
     server,
     path: '/api/ws',
