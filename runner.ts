@@ -18,7 +18,6 @@ async function runAgent() {
   const agentType: AgentType = process.argv[2] as AgentType;
   const serviceName = process.argv[3];
   
-  // 1. Add agentType validation (lines 16-24)
   const availableTypes = AgentFactory.getAvailableTypes();
   if (!availableTypes.includes(agentType)) {
     console.error(`❌ Invalid agent type: '${agentType}'`);
@@ -29,7 +28,6 @@ async function runAgent() {
   console.log(`🔍 Starting ${agentType} agent...\n`);
   
   try {
-    // 2. Move factory create inside try block (lines 23-26)
     const agent = AgentFactory.create(agentType);
     // Build options based on agent type
     const options: RunnerAgentOptions = {
@@ -45,9 +43,10 @@ async function runAgent() {
         process.exit(1);
       }
       
-      // 3. Add serviceName validation (lines 33-43)
+      // Validate service name (lowercase + trimmed)
+      const normalizedServiceName = serviceName.toLowerCase().trim();
       const serviceNamePattern = /^[a-z0-9][a-z0-9._-]{0,62}$/;
-      if (!serviceNamePattern.test(serviceName)) {
+      if (!serviceNamePattern.test(normalizedServiceName)) {
         console.error(`❌ Invalid service name: '${serviceName}'`);
         console.error('Service name must:');
         console.error('- Start with alphanumeric character');
@@ -56,9 +55,6 @@ async function runAgent() {
         console.error('Example: jellyfin, nginx-proxy, api.service');
         process.exit(1);
       }
-      
-      // Normalize to lowercase
-      const normalizedServiceName = serviceName.toLowerCase();
       options.serviceName = normalizedServiceName;
       options.environment = 'production';
       options.enableSSL = true;
@@ -151,13 +147,19 @@ async function runAgent() {
 
 
     } else {
+      process.exitCode = 1;
       console.log('='.repeat(80));
       console.error(`❌ ${agentType.toUpperCase()} FAILED`);
       console.log('='.repeat(80));
-      console.error('Error:', result.error);
+      const stringifiedError = typeof result.error === 'string' 
+        ? result.error 
+        : require('util').inspect(result.error, { depth: null, colors: false });
+      console.error('Error:', stringifiedError);
       console.log('\n📋 Execution Logs:');
       console.log('-'.repeat(50));
-      (Array.isArray(result.logs) ? result.logs : []).forEach(log => console.log(log));
+      if (Array.isArray(result.logs)) {
+        result.logs.forEach(log => console.log(log));
+      }
     }
     
   } catch (error) {
@@ -169,20 +171,23 @@ async function runAgent() {
 // Global AbortController for signal handling
 let globalController: AbortController | null = null;
 
-// 4. Add fallback timer to signal handlers (lines 149-161)
+// Fallback timers for graceful shutdown
+let sigintTimer: NodeJS.Timeout | null = null;
+let sigtermTimer: NodeJS.Timeout | null = null;
+
 process.on('SIGINT', () => {
   console.log('\n⚠️  Agent execution interrupted');
   if (globalController) {
     globalController.abort();
     
     // Start fallback timer
-    const fallbackTimer = setTimeout(() => {
+    sigintTimer = setTimeout(() => {
       console.log('\n⚠️  Force exit after timeout');
       process.exit(1);
     }, 4000); // 4 second fallback
     
     // Clear timer if abort completes normally
-    fallbackTimer.unref();
+    sigintTimer.unref();
   }
 });
 
@@ -192,14 +197,20 @@ process.on('SIGTERM', () => {
     globalController.abort();
     
     // Start fallback timer
-    const fallbackTimer = setTimeout(() => {
+    sigtermTimer = setTimeout(() => {
       console.log('\n⚠️  Force exit after timeout');
       process.exit(1);
     }, 4000); // 4 second fallback
     
     // Clear timer if abort completes normally
-    fallbackTimer.unref();
+    sigtermTimer.unref();
   }
+});
+
+// Clear timers on exit to prevent dangling resources
+process.on('exit', () => {
+  if (sigintTimer) clearTimeout(sigintTimer);
+  if (sigtermTimer) clearTimeout(sigtermTimer);
 });
 
 function getAgentDescription(type: string): string {
@@ -220,7 +231,6 @@ function getAgentDescription(type: string): string {
 if (!process.argv[2]) {
   const availableAgents = AgentFactory.getAvailableTypes();
   
-  // 5. Guard against empty availableAgents (lines 177-189)
   if (availableAgents.length === 0) {
     console.log('Usage: npx tsx runner.ts <agent-type> [options]');
     console.log('\n❌ No agents available');

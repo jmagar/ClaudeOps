@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
 import { ConnectionManager } from './connectionManager';
+import { isAllowedOrigin } from '../../../server';
 import { 
   ServerMessage, 
   createMessage,
@@ -36,16 +37,14 @@ export class WebSocketManager {
   private setupWebSocketServer(): void {
     this.wss.on('connection', (ws: WebSocket, request: IncomingMessage) => {
       try {
-        // Validate origin in production
-        if (process.env.NODE_ENV === 'production') {
-          const origin = request.headers.origin;
-          const host = request.headers.host;
-          
-          if (!origin || !this.isValidOrigin(origin, host)) {
-            console.warn(`Rejected WebSocket connection from invalid origin: ${origin}`);
-            ws.close(1008, 'Invalid origin');
-            return;
-          }
+        // Validate origin using consolidated validation function
+        const origin = request.headers.origin;
+        const host = request.headers.host;
+        
+        if (!isAllowedOrigin(origin || '', host)) {
+          console.warn(`Rejected WebSocket connection from invalid origin: ${origin}`);
+          ws.close(1008, 'Invalid origin');
+          return;
         }
 
         // Add connection to manager
@@ -74,25 +73,6 @@ export class WebSocketManager {
 
   }
 
-  /**
-   * Validate WebSocket origin for security
-   */
-  private isValidOrigin(origin: string, host?: string): boolean {
-    try {
-      const originUrl = new URL(origin);
-      const expectedHost = host || 'localhost:3000';
-      
-      // Allow localhost and the expected host
-      return (
-        originUrl.hostname === 'localhost' ||
-        originUrl.host === expectedHost ||
-        originUrl.hostname === '127.0.0.1'
-      );
-    } catch (error) {
-      console.warn('Invalid origin URL:', origin);
-      return false;
-    }
-  }
 
   // Public API methods for broadcasting different types of messages
 

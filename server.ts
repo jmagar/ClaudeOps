@@ -11,9 +11,53 @@ const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
+// Function to check if origin is allowed for WebSocket connections
+export const isAllowedOrigin = (origin: string, host?: string): boolean => {
+  const allowedOrigins = parseAllowedOrigins(process.env.WS_ALLOWED_ORIGINS);
+  
+  // In development, allow localhost connections
+  if (process.env.NODE_ENV !== 'production') {
+    return true;
+  }
+  
+  // If no origins are configured in production, reject all
+  if (allowedOrigins.length === 0) {
+    return false;
+  }
+  
+  return allowedOrigins.some(allowedOrigin => {
+    try {
+      const originUrl = new URL(origin);
+      const allowedUrl = new URL(allowedOrigin);
+      
+      // Normalize ports for comparison (ws:80, wss:443 defaults)
+      const normalizePort = (url: URL): string => {
+        if (url.port) return url.port;
+        return url.protocol === 'https:' || url.protocol === 'wss:' ? '443' : '80';
+      };
+      
+      return originUrl.hostname === allowedUrl.hostname && 
+             normalizePort(originUrl) === normalizePort(allowedUrl) &&
+             originUrl.protocol === allowedUrl.protocol;
+    } catch {
+      return origin === allowedOrigin;
+    }
+  });
+};
+
+// Parse allowed WebSocket origins
+const parseAllowedOrigins = (value: string | undefined): string[] => {
+  if (!value) return [];
+  return value.split(',').map(origin => origin.trim()).filter(Boolean);
+};
+
 app.prepare().then(() => {
   const server = createServer((req, res) => {
-    const url = new URL(req.url || '/', `http://${req.headers.host || hostname}`);
+    const forwardedProto = req.headers['x-forwarded-proto']?.toString()?.split(',')[0]?.trim();
+    const forwardedHost = req.headers['x-forwarded-host']?.toString()?.split(',')[0]?.trim();
+    const protocol = forwardedProto || 'http';
+    const host = forwardedHost || req.headers.host || hostname;
+    const url = new URL(req.url || '/', `${protocol}://${host}`);
     
     // Preserve multi-value query parameters
     const query: Record<string, string | string[]> = {};
@@ -41,7 +85,7 @@ app.prepare().then(() => {
   });
 
   // Configure HTTP server timeouts to prevent slowloris attacks
-  server.timeout = 120000; // 2 minutes
+  server.requestTimeout = 120000; // 2 minutes - Node 18+ compatible
   server.headersTimeout = 60000; // 1 minute
   server.keepAliveTimeout = 5000; // 5 seconds
 
@@ -77,47 +121,31 @@ app.prepare().then(() => {
     return parsed;
   };
   
-  // Parse allowed WebSocket origins
-  const parseAllowedOrigins = (value: string | undefined): string[] => {
-    if (!value) return [];
-    return value.split(',').map(origin => origin.trim()).filter(Boolean);
-  };
-
-  const allowedOrigins = parseAllowedOrigins(process.env.WS_ALLOWED_ORIGINS);
-
-  // WebSocket origin validation function
-  const verifyClient = (info: { origin: string; secure: boolean; req: IncomingMessage }): boolean => {
+  // WebSocket origin validation function with proper callback signature
+  const verifyClient = (info: { origin: string; secure: boolean; req: IncomingMessage }, cb: (result: boolean, code?: number, message?: string) => void): void => {
     const { origin, req } = info;
+    const host = req.headers.host;
     
-    // In development, allow localhost connections
-    if (process.env.NODE_ENV !== 'production') {
-      return true;
-    }
-
-    // Check if origin is in allowed list
-    if (allowedOrigins.length > 0) {
-      const isAllowed = allowedOrigins.some(allowedOrigin => {
-        try {
-          const originUrl = new URL(origin);
-          const allowedUrl = new URL(allowedOrigin);
-          return originUrl.hostname === allowedUrl.hostname && 
-                 originUrl.port === allowedUrl.port &&
-                 originUrl.protocol === allowedUrl.protocol;
-        } catch {
-          return origin === allowedOrigin;
-        }
-      });
-
-      if (!isAllowed) {
-        console.warn(`Rejected WebSocket connection from unauthorized origin: ${origin}`);
-        return false;
+    // Handle missing or invalid origins gracefully
+    if (!origin) {
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('Rejected WebSocket connection: missing origin header');
+        cb(false, 401, 'Missing origin header');
+        return;
+      } else {
+        cb(true); // Allow in development even without origin
+        return;
       }
     }
-
-    // Additional server-side auth check could go here
-    // For now, we'll rely on the origin validation
     
-    return true;
+    const isAllowed = isAllowedOrigin(origin, host);
+    
+    if (!isAllowed) {
+      console.warn(`Rejected WebSocket connection from unauthorized origin: ${origin}`);
+      cb(false, 401, 'Unauthorized origin');
+    } else {
+      cb(true);
+    }
   };
 
   const maxPayload = parseMaxPayload(process.env.WS_MAX_PAYLOAD);
