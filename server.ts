@@ -37,9 +37,7 @@ app.prepare().then(() => {
     };
     
     handle(req, res, {
-      pathname: parsedUrl.pathname,
-      query: parsedUrl.query,
-      search: parsedUrl.search,
+      ...parsedUrl,
       hash: url.hash,
       href: url.href,
       protocol: url.protocol,
@@ -49,29 +47,30 @@ app.prepare().then(() => {
       slashes: true,
       auth: null,
       path: url.pathname + url.search
-    });
+    } as any);
   });
 
   // Handle server errors
-  server.on('error', (error: any) => {
-    if (error.code === 'EADDRINUSE') {
+  server.on('error', (error: NodeJS.ErrnoException | null) => {
+    if (error?.code === 'EADDRINUSE') {
       console.error(`❌ Port ${port} is already in use. Please free the port or use a different one.`);
       process.exit(1);
-    } else if (error.code === 'EACCES') {
+    } else if (error?.code === 'EACCES') {
       console.error(`❌ Permission denied to bind to port ${port}. Try a port number above 1024.`);
       process.exit(1);
     } else {
-      console.error('❌ Server error:', error.message);
+      console.error('❌ Server error:', error?.message);
       process.exit(1);
     }
   });
 
   // Create WebSocket server
+  const maxPayload = parseInt(process.env.WS_MAX_PAYLOAD || '1048576', 10); // 1MB default
   const wss = new WebSocketServer({ 
     server,
     path: '/api/ws',
     clientTracking: true,
-    maxPayload: 64 * 1024, // 64KB max message size
+    maxPayload,
     perMessageDeflate: {
       threshold: 1024,
       concurrencyLimit: 10,
@@ -93,29 +92,35 @@ app.prepare().then(() => {
   setWebSocketManager(wsManager);
 
   // Start the server
-  server.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port}`);
-    console.log(`> WebSocket server ready on ws://${hostname}:${port}/api/ws`);
+  server.listen(port, hostname, () => {
+    const advertisedHost = (hostname === '0.0.0.0' || hostname === '::') ? 'localhost' : hostname;
+    console.log(`> Ready on http://${advertisedHost}:${port} (listening on ${hostname})`);
+    console.log(`> WebSocket server ready on ws://${advertisedHost}:${port}/api/ws`);
   });
 
   // Graceful shutdown
   const shutdown = async () => {
     console.log('Initiating graceful shutdown...');
     
+    const timeout = setTimeout(() => {
+      console.log('⚠️ Shutdown timeout - force exiting');
+      process.exit(1);
+    }, 10000);
+    
     try {
       // Shutdown WebSocket manager first
       await wsManager.shutdown();
       
       // Close HTTP server
-      server.close((err) => {
-        if (err) {
-          console.error('Error closing HTTP server:', err);
-          process.exit(1);
-        }
-        console.log('HTTP server closed successfully');
-        process.exit(0);
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => err ? reject(err) : resolve());
       });
+      
+      clearTimeout(timeout);
+      console.log('HTTP server closed successfully');
+      process.exit(0);
     } catch (error) {
+      clearTimeout(timeout);
       console.error('Error during shutdown:', error);
       process.exit(1);
     }
@@ -123,4 +128,7 @@ app.prepare().then(() => {
 
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
+}).catch((error) => {
+  console.error('❌ Failed to initialize Next.js app:', error);
+  process.exit(1);
 });

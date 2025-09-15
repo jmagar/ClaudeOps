@@ -67,32 +67,48 @@ export class AgentFactory {
     type: AgentType,
     options: BaseAgentOptions = {}
   ): T {
+    // Merge with default options for future use
     const mergedOptions = {
       ...this.defaultOptions,
       ...options
     };
 
+    let agent: T;
+
     switch (type) {
       case 'system-health':
-        return new SystemHealthAgent() as T;
+        agent = new SystemHealthAgent() as T;
+        break;
       case 'docker-deployment':
-        return new DockerDeploymentAgent() as T;
+        agent = new DockerDeploymentAgent() as T;
+        break;
       case 'infrastructure-analysis':
-        return new InfrastructureAnalysisAgent() as T;
+        agent = new InfrastructureAnalysisAgent() as T;
+        break;
       case 'service-research':
-        return new ServiceResearchAgent() as T;
+        agent = new ServiceResearchAgent() as T;
+        break;
       case 'config-generator':
-        return new ConfigGeneratorAgent() as T;
+        agent = new ConfigGeneratorAgent() as T;
+        break;
       case 'security-credentials':
-        return new SecurityCredentialsAgent() as T;
+        agent = new SecurityCredentialsAgent() as T;
+        break;
       case 'deployment-executor':
-        return new DeploymentExecutorAgent() as T;
+        agent = new DeploymentExecutorAgent() as T;
+        break;
       case 'verification':
-        return new VerificationAgent() as T;
+        agent = new VerificationAgent() as T;
+        break;
       
       default:
         throw new Error(`Unknown agent type: ${type}. Available types: ${this.getAvailableTypes().join(', ')}`);
     }
+
+    // Store merged options for the agent to use in execute if no options are provided
+    (agent as any)._factoryDefaultOptions = mergedOptions;
+    
+    return agent;
   }
 
   /**

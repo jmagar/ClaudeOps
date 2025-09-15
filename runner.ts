@@ -1,9 +1,7 @@
-import { AgentFactory } from './src/lib/agents';
+import { AgentFactory, AgentType } from './src/lib/agents';
+import type { BaseAgentOptions } from './src/lib/agents/core/types';
 
-type AgentType = 'system-health' | 'docker-deployment' | 'infrastructure-analysis' | 'service-research' | 'config-generator' | 'security-credentials' | 'deployment-executor' | 'verification';
-
-interface AgentOptions {
-  timeout_ms: number;
+interface RunnerAgentOptions extends BaseAgentOptions {
   serviceName?: string;
   environment?: string;
   enableSSL?: boolean;
@@ -12,7 +10,6 @@ interface AgentOptions {
   includeSecurityScan?: boolean;
   detailedServiceAnalysis?: boolean;
   aiAnalysisDepth?: string;
-  onLog?: (message: string, level?: string) => void;
 }
 
 async function runAgent() {
@@ -26,7 +23,7 @@ async function runAgent() {
   
   try {
     // Build options based on agent type
-    const options: AgentOptions = {
+    const options: RunnerAgentOptions = {
       timeout_ms: 300000, // 5 minutes
     };
     
@@ -49,6 +46,11 @@ async function runAgent() {
       options.aiAnalysisDepth = 'detailed';
     }
     
+    // Add AbortController for graceful shutdown
+    const controller = new AbortController();
+    globalController = controller;
+    options.abortController = controller;
+    
     // Add logging callbacks
     options.onLog = (message, level) => {
       if (typeof message !== 'string') return;
@@ -68,8 +70,13 @@ async function runAgent() {
       } else if (message.includes('📊 Tool result:')) {
         // Show condensed tool results with secret redaction
         let toolResult = message.replace('📊 Tool result: ', '');
-        // Redact sensitive information
-        toolResult = toolResult.replace(/(?:token|secret|password|api[_-]?key)=\S+/gi, '[REDACTED]');
+        // Redact multiple secret patterns
+        toolResult = toolResult
+          .replace(/Authorization[:\s]*Bearer\s+\S+/gi, 'Authorization: Bearer [REDACTED]')
+          .replace(/"(?:apiKey|apikey|api_key|secret|password|token|accessKeyId|secretAccessKey)"\s*:\s*"[^"]+"/gi, '"$1": "[REDACTED]"')
+          .replace(/AKIA[0-9A-Z]{16}/g, 'AKIA[REDACTED]')
+          .replace(/\S+\.\S+\.\S+/g, '[JWT-REDACTED]')
+          .replace(/(?:token|secret|password|api[_-]?key)=\S+/gi, '[REDACTED]');
         console.log(`  ✓ ${toolResult.substring(0, 200)}${toolResult.length > 200 ? '...' : ''}`);
       } else if (agentType === 'docker-deployment') {
         // Docker-specific logging comes after general tool handling
@@ -142,15 +149,21 @@ async function runAgent() {
   }
 }
 
-// Handle graceful shutdown
+// Global AbortController for signal handling
+let globalController: AbortController | null = null;
+
 process.on('SIGINT', () => {
   console.log('\n⚠️  Agent execution interrupted');
-  process.exit(0);
+  if (globalController) {
+    globalController.abort();
+  }
 });
 
 process.on('SIGTERM', () => {
   console.log('\n⚠️  Agent execution terminated');
-  process.exit(0);
+  if (globalController) {
+    globalController.abort();
+  }
 });
 
 function getAgentDescription(type: string): string {

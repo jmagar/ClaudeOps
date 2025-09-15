@@ -48,22 +48,28 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
    * Main execution method with all SDK functionality
    */
   async execute(options: TOptions = {} as TOptions): Promise<BaseAgentResult> {
+    // Merge with factory default options if they exist
+    const factoryDefaults = (this as any)._factoryDefaultOptions || {};
+    const mergedOptions = {
+      ...factoryDefaults,
+      ...options
+    } as TOptions;
     const executionId = createId();
     const startTime = Date.now();
     const logs: string[] = [];
     
     // Set up logging
-    const log = this.createLogger(logs, options.onLog);
+    const log = this.createLogger(logs, mergedOptions.onLog);
     
     // Set up abort controller for timeout
-    const abortController = options.abortController || new AbortController();
+    const abortController = mergedOptions.abortController || new AbortController();
     let timeoutId: NodeJS.Timeout | undefined;
     
-    if (options.timeout_ms) {
+    if (mergedOptions.timeout_ms) {
       timeoutId = setTimeout(() => {
         log('⏰ Execution timeout reached, aborting...', 'warn');
         abortController.abort();
-      }, options.timeout_ms);
+      }, mergedOptions.timeout_ms);
     }
 
     try {
@@ -75,15 +81,15 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
         stage: 'starting',
         message: 'Initializing agent execution',
         currentTurn: 0,
-        maxTurns: options.maxTurns || 50,
+        maxTurns: mergedOptions.maxTurns || 50,
         toolsUsed: [],
         cost: 0
       };
       
-      this.reportProgress(progress, options.onProgress);
+      this.reportProgress(progress, mergedOptions.onProgress);
 
       // Build prompt
-      const prompt = this.buildPrompt(options);
+      const prompt = this.buildPrompt(mergedOptions);
       log('📝 Built investigation prompt', 'debug');
 
       // Initialize result tracking
@@ -98,27 +104,27 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
 
       progress.stage = 'investigating';
       progress.message = 'Launching Claude investigation';
-      this.reportProgress(progress, options.onProgress);
+      this.reportProgress(progress, mergedOptions.onProgress);
 
       // Configure Claude query with proper SDK options
       const sdkOptions: Options = {
-        maxTurns: options.maxTurns || 50,
-        permissionMode: options.permissionMode || this.getPermissionMode(),
+        maxTurns: mergedOptions.maxTurns || 50,
+        permissionMode: mergedOptions.permissionMode || this.getPermissionMode(),
         allowedTools: this.getAllowedTools(),
         customSystemPrompt: this.getSystemPrompt(),
-        includePartialMessages: options.includePartialMessages || true,
+        includePartialMessages: mergedOptions.includePartialMessages || true,
         abortController,
-        ...(options.hooks?.preToolUse && {
+        ...(mergedOptions.hooks?.preToolUse && {
           hooks: {
             PreToolUse: [{
-              hooks: options.hooks.preToolUse
+              hooks: mergedOptions.hooks.preToolUse
             }]
           }
         }),
-        ...(options.hooks?.postToolUse && {
+        ...(mergedOptions.hooks?.postToolUse && {
           hooks: {
             PostToolUse: [{
-              hooks: options.hooks.postToolUse
+              hooks: mergedOptions.hooks.postToolUse
             }]
           }
         })
@@ -139,7 +145,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
         await this.processMessage(message, {
           log,
           progress,
-          onProgress: options.onProgress,
+          onProgress: mergedOptions.onProgress,
           totalCost,
           totalUsage,
           result,
@@ -159,7 +165,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
             progress.stage = 'completing';
             progress.message = 'Claude investigation completed successfully';
             progress.cost = totalCost;
-            this.reportProgress(progress, options.onProgress);
+            this.reportProgress(progress, mergedOptions.onProgress);
             
             log('✅ Claude investigation completed successfully');
           } else {
@@ -171,7 +177,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
               totalCost,
               timeElapsed: Date.now() - startTime,
               lastTool: progress.toolsUsed?.slice(-1)[0]
-            }, options);
+            }, mergedOptions);
 
             if (error.action === 'abort') {
               throw new Error(`Investigation failed: ${message.subtype} - ${error.message}`);
@@ -203,11 +209,11 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
         logs,
         timestamp: new Date().toISOString(),
         summary: `${this.getAgentType()} investigation completed - Cost: $${totalCost.toFixed(4)}`,
-        sessionId: options.sessionId
+        sessionId: mergedOptions.sessionId
       };
 
-      if (options.hooks?.onComplete) {
-        await options.hooks.onComplete(finalResult);
+      if (mergedOptions.hooks?.onComplete) {
+        await mergedOptions.hooks.onComplete(finalResult);
       }
 
       return finalResult;
@@ -224,7 +230,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
       log(`❌ ERROR: ${errorMessage}`, 'error');
 
       // Handle error through hook if provided
-      if (options.hooks?.onError) {
+      if (mergedOptions.hooks?.onError) {
         const agentError: AgentError = {
           type: abortController.signal.aborted ? 'timeout' : 'custom',
           message: errorMessage,
@@ -239,7 +245,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
           timeElapsed: duration
         };
 
-        const recovery = await options.hooks.onError(agentError, errorContext);
+        const recovery = await mergedOptions.hooks.onError(agentError, errorContext);
         if (recovery.action === 'retry') {
           log(`🔄 Retrying execution after ${recovery.retryDelay || 0}ms...`);
           if (recovery.retryDelay) {
@@ -265,7 +271,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
         logs,
         timestamp: new Date().toISOString(),
         error: errorMessage,
-        sessionId: options.sessionId
+        sessionId: mergedOptions.sessionId
       };
     }
   }
@@ -318,7 +324,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
         if (textBlock && 'text' in textBlock) {
           context.result = textBlock.text;
         }
-      } else if (typeof content === 'string') {
+      } else if (typeof content === 'string' && content) {
         context.result = content;
         const preview = content.length > 500 ? content.substring(0, 500) + '...' : content;
         log(`💭 Claude: ${preview}`);
@@ -351,16 +357,16 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
   private async handleSDKError(
     errorSubtype: string,
     context: ErrorContext,
-    options: TOptions
+    mergedOptions: TOptions
   ): Promise<ErrorRecovery> {
-    const log = this.createLogger([], options.onLog);
+    const log = this.createLogger([], mergedOptions.onLog);
     
     switch (errorSubtype) {
       case 'error_max_turns':
         log('⚠️ Maximum turns reached, investigation may be incomplete', 'warn');
         return {
           action: 'increase_turns',
-          newMaxTurns: (options.maxTurns || 50) + 20,
+          newMaxTurns: (mergedOptions.maxTurns || 50) + 20,
           message: 'Increased turn limit and retrying'
         };
 
