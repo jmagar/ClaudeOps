@@ -6,7 +6,7 @@ import { WebSocketManager, setWebSocketManager } from './src/lib/websocket/serve
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || process.env.HOST || '0.0.0.0';
-const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT) : 3010;
 
 // Initialize Next.js application
 const app = next({ dev, hostname, port });

@@ -9,6 +9,12 @@ export { PermissionManager } from './core/PermissionManager';
 // Import agent implementations for factory
 import { SystemHealthAgent } from './systemHealthAgent';
 import { DockerDeploymentAgent } from './dockerDeploymentAgent';
+import { InfrastructureAnalysisAgent } from './infrastructureAnalysisAgent';
+import { ServiceResearchAgent } from './serviceResearchAgent';
+import { ConfigGeneratorAgent } from './configGeneratorAgent';
+import { SecurityCredentialsAgent } from './securityCredentialsAgent';
+import { DeploymentExecutorAgent } from './deploymentExecutorAgent';
+import { VerificationAgent } from './verificationAgent';
 
 // Types and interfaces
 export type {
@@ -38,6 +44,12 @@ export type {
 // Specific agent implementations
 export { SystemHealthAgent } from './systemHealthAgent';
 export { DockerDeploymentAgent } from './dockerDeploymentAgent';
+export { InfrastructureAnalysisAgent } from './infrastructureAnalysisAgent';
+export { ServiceResearchAgent } from './serviceResearchAgent';
+export { ConfigGeneratorAgent } from './configGeneratorAgent';
+export { SecurityCredentialsAgent } from './securityCredentialsAgent';
+export { DeploymentExecutorAgent } from './deploymentExecutorAgent';
+export { VerificationAgent } from './verificationAgent';
 
 // Agent factory for creating different agent types
 export class AgentFactory {
@@ -65,15 +77,21 @@ export class AgentFactory {
         return new SystemHealthAgent() as T;
       case 'docker-deployment':
         return new DockerDeploymentAgent() as T;
-      
-      // Add more agent types here as they're implemented
-      // case 'network-analyzer':
-      //   return new NetworkAnalyzerAgent() as T;
-      // case 'security-scanner':
-      //   return new SecurityScannerAgent() as T;
+      case 'infrastructure-analysis':
+        return new InfrastructureAnalysisAgent() as T;
+      case 'service-research':
+        return new ServiceResearchAgent() as T;
+      case 'config-generator':
+        return new ConfigGeneratorAgent() as T;
+      case 'security-credentials':
+        return new SecurityCredentialsAgent() as T;
+      case 'deployment-executor':
+        return new DeploymentExecutorAgent() as T;
+      case 'verification':
+        return new VerificationAgent() as T;
       
       default:
-        throw new Error(`Unknown agent type: ${type}`);
+        throw new Error(`Unknown agent type: ${type}. Available types: ${this.getAvailableTypes().join(', ')}`);
     }
   }
 
@@ -83,8 +101,13 @@ export class AgentFactory {
   static getAvailableTypes(): AgentType[] {
     return [
       'system-health',
-      'docker-deployment'
-      // Add more types as they're implemented
+      'docker-deployment',
+      'infrastructure-analysis',
+      'service-research',
+      'config-generator',
+      'security-credentials',
+      'deployment-executor',
+      'verification'
     ];
   }
 

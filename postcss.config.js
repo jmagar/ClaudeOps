@@ -1,7 +1,7 @@
 /** @type {import('postcss-load-config').Config} */
-module.exports = {
+export default {
   plugins: {
-    tailwindcss: {},
+    '@tailwindcss/postcss': {},
     autoprefixer: {
       // Use browserslist from .browserslistrc
       flexbox: 'no-2009'

@@ -18,8 +18,13 @@ export type {
   PostToolUseHookInput
 } from '@anthropic-ai/claude-code';
 
-// Import TokenUsage from existing types
-export { TokenUsage } from '../../types/agent';
+// Token usage interface - define locally to avoid circular imports
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+}
 
 // Base agent result interface
 export interface BaseAgentResult {
@@ -174,7 +179,17 @@ export interface IBaseAgent<TOptions extends BaseAgentOptions = BaseAgentOptions
 }
 
 // Factory pattern types
-export type AgentType = 'system-health' | 'docker-deployment' | 'example' | string;
+export type AgentType = 
+  | 'system-health' 
+  | 'docker-deployment'
+  | 'infrastructure-analysis'
+  | 'service-research'
+  | 'config-generator'
+  | 'security-credentials'
+  | 'deployment-executor'
+  | 'verification'
+  | 'example' 
+  | string;
 
 export interface AgentFactoryOptions {
   defaultHooks?: AgentHooks;

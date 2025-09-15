@@ -353,7 +353,7 @@ export abstract class BaseAgent<TOptions extends BaseAgentOptions = BaseAgentOpt
     context: ErrorContext,
     options: TOptions
   ): Promise<ErrorRecovery> {
-    const { log } = this.createLogger([], options.onLog);
+    const log = this.createLogger([], options.onLog);
     
     switch (errorSubtype) {
       case 'error_max_turns':
