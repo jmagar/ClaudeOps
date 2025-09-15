@@ -1,7 +1,9 @@
 import { AgentFactory } from './src/lib/agents';
 
+type AgentType = 'system-health' | 'docker-deployment' | 'infrastructure-analysis' | 'service-research' | 'config-generator' | 'security-credentials' | 'deployment-executor' | 'verification';
+
 interface AgentOptions {
-  timeoutMs: number;
+  timeout_ms: number;
   serviceName?: string;
   environment?: string;
   enableSSL?: boolean;
@@ -15,7 +17,7 @@ interface AgentOptions {
 
 async function runAgent() {
   // Get agent type from command line or default to system-health
-  const agentType = process.argv[2] || 'system-health';
+  const agentType: AgentType = process.argv[2] as AgentType;
   const serviceName = process.argv[3];
   
   console.log(`🔍 Starting ${agentType} agent...\n`);
@@ -25,7 +27,7 @@ async function runAgent() {
   try {
     // Build options based on agent type
     const options: AgentOptions = {
-      timeoutMs: 300000, // 5 minutes
+      timeout_ms: 300000, // 5 minutes
     };
     
     // Add agent-specific options
@@ -57,8 +59,20 @@ async function runAgent() {
         console.warn(`⚠️  ${message}`);
       } else if (level === 'debug') {
         console.debug(`🔎 ${message}`);
+      } else if (message.includes('🔧 Running:')) {
+        // Show tool execution in simplified format
+        const toolMatch = message.match(/🔧 Running:\s*([A-Za-z0-9_-]+)/);
+        if (toolMatch) {
+          console.log(`  → Executing ${toolMatch[1]}...`);
+        }
+      } else if (message.includes('📊 Tool result:')) {
+        // Show condensed tool results with secret redaction
+        let toolResult = message.replace('📊 Tool result: ', '');
+        // Redact sensitive information
+        toolResult = toolResult.replace(/(?:token|secret|password|api[_-]?key)=\S+/gi, '[REDACTED]');
+        console.log(`  ✓ ${toolResult.substring(0, 200)}${toolResult.length > 200 ? '...' : ''}`);
       } else if (agentType === 'docker-deployment') {
-        // Special logging for docker deployment to show parallel execution
+        // Docker-specific logging comes after general tool handling
         if (message.includes('🚀') || message.includes('📊') || message.includes('⚙️') || message.includes('🔍')) {
           console.log(message); // Show phase transitions
         } else if (message.includes('✅')) {
@@ -69,16 +83,6 @@ async function runAgent() {
       } else if (message.includes('💭 Claude:')) {
         // Show Claude's full thinking without extra formatting
         console.log(message);
-      } else if (message.includes('🔧 Running:')) {
-        // Show tool execution in simplified format
-        const toolMatch = message.match(/🔧 Running:\s*([A-Za-z0-9_-]+)/);
-        if (toolMatch) {
-          console.log(`  → Executing ${toolMatch[1]}...`);
-        }
-      } else if (message.includes('📊 Tool result:')) {
-        // Show condensed tool results
-        const toolResult = message.replace('📊 Tool result: ', '');
-        console.log(`  ✓ ${toolResult.substring(0, 200)}${toolResult.length > 200 ? '...' : ''}`);
       }
       // Skip other debug/info logs for cleaner output
     };

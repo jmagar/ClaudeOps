@@ -5,7 +5,7 @@ import { WebSocketManager, setWebSocketManager } from './src/lib/websocket/serve
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || process.env.HOST || '0.0.0.0';
-const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Initialize Next.js application
 const app = next({ dev, hostname, port });
@@ -14,10 +14,32 @@ const handle = app.getRequestHandler();
 app.prepare().then(() => {
   const server = createServer((req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || hostname}`);
-    handle(req, res, {
+    
+    // Preserve multi-value query parameters
+    const query: Record<string, string | string[]> = {};
+    url.searchParams.forEach((value, key) => {
+      if (query[key]) {
+        // Convert to array if not already, then add value
+        if (Array.isArray(query[key])) {
+          (query[key] as string[]).push(value);
+        } else {
+          query[key] = [query[key] as string, value];
+        }
+      } else {
+        query[key] = value;
+      }
+    });
+    
+    const parsedUrl = {
       pathname: url.pathname,
-      query: Object.fromEntries(url.searchParams),
-      search: url.search,
+      query,
+      search: url.search
+    };
+    
+    handle(req, res, {
+      pathname: parsedUrl.pathname,
+      query: parsedUrl.query,
+      search: parsedUrl.search,
       hash: url.hash,
       href: url.href,
       protocol: url.protocol,
@@ -59,7 +81,7 @@ app.prepare().then(() => {
         level: 6
       },
       zlibInflateOptions: {
-        level: 6
+        // use defaults
       }
     }
   });
