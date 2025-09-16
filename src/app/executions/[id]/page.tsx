@@ -5,9 +5,9 @@ import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
 
 interface ExecutionPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // Loading component for the execution detail
@@ -99,8 +99,8 @@ function isValidExecutionId(id: string): boolean {
   return uuidRegex.test(id) || customIdRegex.test(id);
 }
 
-export default function ExecutionPage({ params }: ExecutionPageProps) {
-  const { id } = params;
+export default async function ExecutionPage({ params }: ExecutionPageProps) {
+  const { id } = await params;
   
   // Validate execution ID format
   if (!isValidExecutionId(id)) {

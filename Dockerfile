@@ -88,7 +88,7 @@ try {
 EOF
 
 # Create startup script
-RUN cat > /app/start.sh << 'EOF'
+RUN cat > /app/start.sh <<'EOF'
 #!/bin/sh
 set -e
 

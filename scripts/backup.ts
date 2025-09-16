@@ -6,10 +6,14 @@
  * with rotation and cleanup
  */
 
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync, statSync, existsSync, readdirSync } from 'fs';
-import { join, dirname, basename } from 'path';
-import { execSync, spawn } from 'child_process';
-import { gzipSync, gunzipSync } from 'zlib';
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync, statSync, existsSync, readdirSync, createReadStream, createWriteStream } from 'fs';
+import { join, dirname, basename, resolve } from 'path';
+import { execSync, execFileSync, spawn } from 'child_process';
+import { gzipSync, gunzipSync, createGzip, createGunzip } from 'zlib';
+import { pipeline } from 'stream';
+import { promisify } from 'util';
+import { Writable } from 'stream';
+import { pathToFileURL } from 'url';
 
 interface BackupConfig {
   backupPath: string;
@@ -21,6 +25,7 @@ interface BackupConfig {
 
 class BackupManager {
   private config: BackupConfig;
+  private pipelineAsync = promisify(pipeline);
 
   constructor() {
     this.config = {
@@ -30,7 +35,27 @@ class BackupManager {
       dbFile: process.env.DB_FILE || 'production.db',
       logFile: '',
     };
+
+    // Support DATABASE_PATH for consistency with other scripts
+    if (process.env.DATABASE_PATH) {
+      const dbPath = process.env.DATABASE_PATH;
+      const dbBasename = basename(dbPath);
+      
+      // If DATABASE_PATH points to a file (ends with .db or basename is not '.')
+      if (dbPath.endsWith('.db') || dbBasename !== '.') {
+        this.config.dataPath = dirname(dbPath);
+        this.config.dbFile = dbBasename;
+      } else {
+        // Otherwise treat DATABASE_PATH as the data directory
+        this.config.dataPath = dbPath;
+      }
+    }
+
     this.config.logFile = join(this.config.backupPath, 'backup.log');
+  }
+
+  private escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private formatBytes(bytes: number): string {
@@ -83,7 +108,8 @@ class BackupManager {
 
   private checkDatabaseIntegrity(dbPath: string): boolean {
     try {
-      const result = execSync(`sqlite3 "${dbPath}" "PRAGMA integrity_check;"`, { 
+      const normalizedDbPath = resolve(dbPath);
+      const result = execFileSync('sqlite3', [normalizedDbPath, 'PRAGMA integrity_check;'], { 
         encoding: 'utf8',
         timeout: 30000 
       }).trim();
@@ -99,7 +125,7 @@ class BackupManager {
     }
   }
 
-  private performBackup(): boolean {
+  private async performBackup(): Promise<boolean> {
     const timestamp = new Date().toISOString().replace(/[:-]/g, '').replace('T', '_').substring(0, 15);
     const dbPath = join(this.config.dataPath, this.config.dbFile);
     const backupFile = join(this.config.backupPath, `${this.config.dbFile.replace('.db', '')}_${timestamp}.db`);
@@ -114,23 +140,35 @@ class BackupManager {
 
     try {
       // Create backup using SQLite backup command
-      execSync(`sqlite3 "${dbPath}" ".backup '${backupFile}'"`, { 
+      const normalizedDbPath = resolve(dbPath);
+      const normalizedBackupFile = resolve(backupFile);
+      execFileSync('sqlite3', [normalizedDbPath, `.backup "${normalizedBackupFile}"`], { 
         timeout: 60000 
       });
       this.log('INFO', `Database backup created: ${backupFile}`);
 
-      // Compress the backup
-      const backupData = readFileSync(backupFile);
-      const compressed = gzipSync(backupData);
-      writeFileSync(backupCompressed, compressed);
+      // Compress the backup using streaming
+      await this.pipelineAsync(
+        createReadStream(backupFile),
+        createGzip(),
+        createWriteStream(backupCompressed)
+      );
       
       // Remove uncompressed backup
       unlinkSync(backupFile);
       this.log('INFO', `Backup compressed: ${backupCompressed}`);
 
-      // Verify backup integrity
+      // Verify backup integrity using streaming
       try {
-        gunzipSync(readFileSync(backupCompressed));
+        await this.pipelineAsync(
+          createReadStream(backupCompressed),
+          createGunzip(),
+          new Writable({
+            write(chunk, encoding, callback) {
+              callback();
+            }
+          })
+        );
         this.log('INFO', `Backup integrity verified: ${backupCompressed}`);
         
         // Log backup size
@@ -162,7 +200,8 @@ class BackupManager {
     let deletedCount = 0;
     let totalSizeFreed = 0;
     const cutoffTime = Date.now() - (this.config.retentionDays * 24 * 60 * 60 * 1000);
-    const backupPattern = new RegExp(`${this.config.dbFile.replace('.db', '')}_\\d+\\.db\\.gz$`);
+    const base = this.escapeRegExp(this.config.dbFile.replace('.db', ''));
+    const backupPattern = new RegExp(`${base}_\\d+\\.db\\.gz$`);
 
     try {
       const files = readdirSync(this.config.backupPath);
@@ -195,7 +234,8 @@ class BackupManager {
   private generateBackupReport(): void {
     try {
       const files = readdirSync(this.config.backupPath);
-      const backupPattern = new RegExp(`${this.config.dbFile.replace('.db', '')}_\\d+\\.db\\.gz$`);
+      const base = this.escapeRegExp(this.config.dbFile.replace('.db', ''));
+      const backupPattern = new RegExp(`${base}_\\d+\\.db\\.gz$`);
       
       let backupCount = 0;
       let totalSize = 0;
@@ -224,7 +264,8 @@ class BackupManager {
 
     // Check if database is accessible
     try {
-      execSync(`sqlite3 "${dbPath}" "SELECT 1;"`, { 
+      const normalizedDbPath = resolve(dbPath);
+      execFileSync('sqlite3', [normalizedDbPath, 'SELECT 1;'], { 
         timeout: 10000,
         stdio: 'ignore' 
       });
@@ -233,14 +274,9 @@ class BackupManager {
       return false;
     }
 
-    // Check disk space (simplified check)
-    try {
-      const stats = statSync(this.config.backupPath);
-      // This is a simplified check - in a real implementation you'd use a more sophisticated disk space check
-      this.log('INFO', 'Disk space check passed');
-    } catch (error) {
-      this.log('WARN', `Could not check disk space: ${error}`);
-    }
+    // Note: Disk space check removed - was not actually checking free space
+    // To implement proper disk space checking, consider using 'check-disk-space' package
+    // or platform-specific commands with appropriate thresholds
 
     return true;
   }
@@ -256,7 +292,7 @@ class BackupManager {
 
     // Pre-flight checks
     try {
-      execSync('sqlite3 --version', { stdio: 'ignore' });
+      execFileSync('sqlite3', ['--version'], { stdio: 'ignore' });
     } catch (error) {
       this.log('ERROR', 'sqlite3 command not found');
       process.exit(1);
@@ -277,7 +313,7 @@ class BackupManager {
     }
 
     // Perform backup
-    if (this.performBackup()) {
+    if (await this.performBackup()) {
       this.log('INFO', 'Backup completed successfully');
     } else {
       this.log('ERROR', 'Backup failed');
@@ -307,7 +343,7 @@ process.on('SIGTERM', () => {
 });
 
 // Execute if run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const backupManager = new BackupManager();
   backupManager.run().catch((error) => {
     console.error('Backup script failed:', error);

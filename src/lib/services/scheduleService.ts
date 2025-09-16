@@ -296,17 +296,16 @@ export class ScheduleService {
       }
       
       // Build the query
-      let query = db.select().from(schedules);
-      if (whereCondition) {
-        query = query.where(whereCondition);
-      }
-      query = query.orderBy(orderColumn);
+      const baseQuery = db.select().from(schedules);
+      const query = whereCondition 
+        ? baseQuery.where(whereCondition).orderBy(orderColumn)
+        : baseQuery.orderBy(orderColumn);
       
       // Get total count
-      let countQuery = db.select({ count: count() }).from(schedules);
-      if (whereCondition) {
-        countQuery = countQuery.where(whereCondition);
-      }
+      const baseCountQuery = db.select({ count: count() }).from(schedules);
+      const countQuery = whereCondition 
+        ? baseCountQuery.where(whereCondition)
+        : baseCountQuery;
 
       const [{ count: total }] = await countQuery;
       const results = await query.limit(limit).offset(offset);

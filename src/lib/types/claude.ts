@@ -225,10 +225,6 @@ export interface HookJSONOutput {
   data?: any;
 }
 
-export interface PreToolUseHookInput {
-  tool: string;
-  parameters: any;
-}
 
 export interface PostToolUseHookInput {
   tool: string;

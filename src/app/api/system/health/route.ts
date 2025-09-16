@@ -13,8 +13,7 @@ import {
   HealthCheckQuerySchema,
   type HealthCheckQuery
 } from '@/lib/middleware/validation';
-import { db } from '@/lib/db/connection';
-import { sql } from 'drizzle-orm';
+import { isDatabaseHealthy } from '@/lib/db/connection';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import type { HealthCheckResponse } from '@/lib/types/api';
@@ -42,14 +41,18 @@ export const GET = withErrorHandler<HealthCheckResponse>(
     if (options.includeDatabase) {
       try {
         const dbStart = Date.now();
-        // Simple test query using SQL template
-        await db.execute(sql`SELECT 1 as test`);
+        // Use the existing health check function
+        const isHealthy = isDatabaseHealthy();
         const dbTime = Date.now() - dbStart;
         
-        checks.database = {
-          status: 'up',
-          responseTime: dbTime
-        };
+        if (isHealthy) {
+          checks.database = {
+            status: 'up',
+            responseTime: dbTime
+          };
+        } else {
+          throw new Error('Database health check failed');
+        }
       } catch (error) {
         checks.database = {
           status: 'down',

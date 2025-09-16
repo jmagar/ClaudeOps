@@ -506,7 +506,6 @@ export class MonitoringScheduler extends EventEmitter {
       const cronJob = cron.schedule(task.cronExpression, async () => {
         await this.executeTask(task);
       }, {
-        scheduled: true,
         timezone: this.config.timezone
       });
 

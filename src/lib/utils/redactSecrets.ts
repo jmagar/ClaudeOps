@@ -22,7 +22,7 @@ const redactionRules: RedactionRule[] = [
   },
   {
     name: 'jwt',
-    pattern: /\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
+    pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
     replacement: '[JWT-REDACTED]'
   },
   {

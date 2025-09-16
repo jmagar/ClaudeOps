@@ -1,6 +1,7 @@
 import type { 
-  PreToolUseHook, 
-  PostToolUseHook 
+  HookCallback,
+  PreToolUseHookInput,
+  PostToolUseHookInput
 } from '@anthropic-ai/claude-code';
 
 import type {
@@ -8,6 +9,10 @@ import type {
   ToolContext,
   LogCallback
 } from './types';
+
+// Local hook types for the HookManager's internal hook system
+export type PreToolUseHook = (toolName: string, input: any) => Promise<boolean>;
+export type PostToolUseHook = (toolName: string, input: any, result: any) => Promise<void>;
 
 /**
  * Manages hook execution for tool monitoring, security, and performance tracking
@@ -49,9 +54,32 @@ export class HookManager {
         // Execute custom pre-hooks
         if (this.hooks.preToolUse) {
           for (const hook of this.hooks.preToolUse) {
-            const allowed = await hook(toolName, input);
-            if (!allowed) {
-              this.log(`🚫 Custom pre-hook blocked ${toolName}`, 'warn');
+            const hookInput = {
+              hook_event_name: 'PreToolUse' as const,
+              session_id: 'current-session', // TODO: Pass actual session ID
+              transcript_path: '', // TODO: Pass actual transcript path
+              cwd: process.cwd(),
+              tool_name: toolName,
+              tool_input: input
+            };
+            
+            const result = await hook(hookInput, undefined, { signal: new AbortController().signal });
+            
+            // Check if hook wants to block the tool use
+            // For async hooks, we can't determine the result immediately
+            if ('async' in result && result.async) {
+              this.log(`⏳ Async hook detected for ${toolName}, continuing execution`, 'debug');
+              continue;
+            }
+            
+            // For sync hooks, check decision and continue flags
+            if ('decision' in result && result.decision === 'block') {
+              this.log(`🚫 Custom pre-hook blocked ${toolName}: ${result.reason || 'No reason provided'}`, 'warn');
+              return false;
+            }
+            
+            if ('continue' in result && result.continue === false) {
+              this.log(`🚫 Custom pre-hook blocked ${toolName}: ${result.stopReason || 'Hook requested stop'}`, 'warn');
               return false;
             }
           }
@@ -86,7 +114,17 @@ export class HookManager {
         // Execute custom post-hooks
         if (this.hooks.postToolUse) {
           for (const hook of this.hooks.postToolUse) {
-            await hook(toolName, input, result);
+            const hookInput = {
+              hook_event_name: 'PostToolUse' as const,
+              session_id: 'current-session', // TODO: Pass actual session ID
+              transcript_path: '', // TODO: Pass actual transcript path
+              cwd: process.cwd(),
+              tool_name: toolName,
+              tool_input: input,
+              tool_response: result
+            };
+            
+            await hook(hookInput, undefined, { signal: new AbortController().signal });
           }
         }
 
@@ -307,10 +345,10 @@ export class HookManager {
   getMetrics(): Record<string, ToolMetrics> {
     const metrics: Record<string, ToolMetrics> = {};
     
-    for (const [toolName, toolMetrics] of this.toolMetrics) {
+    Array.from(this.toolMetrics.entries()).forEach(([toolName, toolMetrics]) => {
       metrics[toolName] = { ...toolMetrics };
       delete metrics[toolName].currentExecution; // Don't expose internal state
-    }
+    });
     
     return metrics;
   }
@@ -321,7 +359,7 @@ export class HookManager {
   getRateLimitStatus(): Record<string, RateLimitStatus> {
     const status: Record<string, RateLimitStatus> = {};
     
-    for (const [toolName, limit] of this.rateLimits) {
+    Array.from(this.rateLimits.entries()).forEach(([toolName, limit]) => {
       const now = Date.now();
       const windowStart = now - limit.windowMs;
       const recentCalls = limit.calls.filter(time => time > windowStart).length;
@@ -333,7 +371,7 @@ export class HookManager {
         isLimited: recentCalls >= limit.maxCalls,
         resetTime: limit.calls.length > 0 ? Math.max(...limit.calls) + limit.windowMs : now
       };
-    }
+    });
     
     return status;
   }

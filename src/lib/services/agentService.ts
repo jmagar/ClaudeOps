@@ -1,7 +1,8 @@
-import { and, eq, desc, asc, count, sum, avg, sql } from 'drizzle-orm';
+import { and, eq, desc, asc, count, sum, avg, sql, gte, lte } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 import { db } from '../db/connection';
-import { agentConfigurations, executions } from '../db/schema';
+import { agentConfigurations } from '../db/schema/agentConfigs';
+import { executions } from '../db/schema/executions';
 import type {
   AgentConfiguration,
   NewAgentConfiguration,
@@ -27,9 +28,9 @@ const preparedQueries = {
 
   updateEnabled: db.update(agentConfigurations)
     .set({ 
-      enabled: sql.placeholder('enabled') as any,
-      updatedAt: sql.placeholder('updatedAt') as any
-    })
+      enabled: sql.placeholder('enabled'),
+      updatedAt: sql.placeholder('updatedAt')
+    } as any)
     .where(eq(agentConfigurations.agentType, sql.placeholder('agentType')))
     .prepare(),
 
@@ -43,7 +44,7 @@ export class AgentService {
   /**
    * Create a new agent configuration
    */
-  async createAgentConfiguration(data: Omit<NewAgentConfiguration, 'id'>): Promise<DatabaseOperationResult<AgentConfiguration>> {
+  async createAgentConfiguration(data: any): Promise<DatabaseOperationResult<AgentConfiguration>> {
     try {
       this.validateAgentConfigData(data);
 
@@ -53,12 +54,12 @@ export class AgentService {
         throw new ValidationError(`Agent type '${data.agentType}' already exists`, 'agentType', data.agentType);
       }
 
-      const configData: NewAgentConfiguration = {
-        id: createId(),
+      const configData = {
         ...data,
+        id: data.id || createId(),
         config: data.config ? JSON.stringify(data.config) : undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || new Date().toISOString(),
       };
 
       const [result] = await db.insert(agentConfigurations).values(configData).returning();
@@ -116,14 +117,14 @@ export class AgentService {
    */
   async updateAgentConfiguration(
     agentType: string, 
-    updates: AgentConfigurationUpdate
+    updates: any
   ): Promise<DatabaseOperationResult<AgentConfiguration>> {
     try {
       const updateData = {
         ...updates,
         config: updates.config ? JSON.stringify(updates.config) : undefined,
         updatedAt: new Date().toISOString()
-      };
+      } as any;
 
       const [result] = await db.update(agentConfigurations)
         .set(updateData)
@@ -208,36 +209,40 @@ export class AgentService {
         conditions.push(eq(agentConfigurations.enabled, enabled));
       }
 
-      // Build query
-      let query = db.select().from(agentConfigurations);
+      // Build the complete query at once to avoid type issues
+      const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
       
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-      }
-
-      // Apply ordering
+      let orderByColumn;
+      let orderByDirection;
+      
       switch (orderBy) {
         case 'name':
-          query = orderDirection === 'asc' ? query.orderBy(asc(agentConfigurations.name)) : query.orderBy(desc(agentConfigurations.name));
+          orderByColumn = agentConfigurations.name;
           break;
         case 'agentType':
-          query = orderDirection === 'asc' ? query.orderBy(asc(agentConfigurations.agentType)) : query.orderBy(desc(agentConfigurations.agentType));
+          orderByColumn = agentConfigurations.agentType;
           break;
         case 'createdAt':
-          query = orderDirection === 'asc' ? query.orderBy(asc(agentConfigurations.createdAt)) : query.orderBy(desc(agentConfigurations.createdAt));
+          orderByColumn = agentConfigurations.createdAt;
           break;
         case 'updatedAt':
-          query = orderDirection === 'asc' ? query.orderBy(asc(agentConfigurations.updatedAt)) : query.orderBy(desc(agentConfigurations.updatedAt));
+          orderByColumn = agentConfigurations.updatedAt;
           break;
         default:
-          query = query.orderBy(asc(agentConfigurations.name));
+          orderByColumn = agentConfigurations.name;
       }
+      
+      orderByDirection = orderDirection === 'asc' ? asc(orderByColumn) : desc(orderByColumn);
+      
+      // Build complete query
+      const query = whereCondition
+        ? db.select().from(agentConfigurations).where(whereCondition).orderBy(orderByDirection)
+        : db.select().from(agentConfigurations).orderBy(orderByDirection);
 
       // Get total count
-      let countQuery = db.select({ count: count() }).from(agentConfigurations);
-      if (conditions.length > 0) {
-        countQuery = countQuery.where(and(...conditions));
-      }
+      const countQuery = whereCondition 
+        ? db.select({ count: count() }).from(agentConfigurations).where(whereCondition)
+        : db.select({ count: count() }).from(agentConfigurations);
       
       const [{ count: total }] = await countQuery;
       const results = await query.limit(limit).offset(offset);
@@ -290,11 +295,13 @@ export class AgentService {
    */
   async toggleAgentEnabled(agentType: string, enabled: boolean): Promise<DatabaseOperationResult<AgentConfiguration>> {
     try {
-      const [result] = await preparedQueries.updateEnabled.execute({
-        enabled,
-        updatedAt: new Date().toISOString(),
-        agentType
-      });
+      const [result] = await db.update(agentConfigurations)
+        .set({ 
+          enabled,
+          updatedAt: new Date().toISOString()
+        } as any)
+        .where(eq(agentConfigurations.agentType, agentType))
+        .returning();
 
       if (!result) {
         throw new NotFoundError('AgentConfiguration', agentType);
@@ -321,7 +328,7 @@ export class AgentService {
    */
   async getAgentPerformance(agentType?: string): Promise<DatabaseOperationResult<AgentPerformance[]>> {
     try {
-      let query = db.select({
+      const baseQuery = db.select({
         agentType: executions.agentType,
         totalExecutions: count(),
         successfulExecutions: sql<number>`COUNT(CASE WHEN status = 'completed' THEN 1 END)`,
@@ -334,11 +341,9 @@ export class AgentService {
       .from(executions)
       .groupBy(executions.agentType);
 
-      if (agentType) {
-        query = query.where(eq(executions.agentType, agentType));
-      }
-
-      const results = await query.orderBy(desc(count()));
+      const results = agentType 
+        ? await baseQuery.where(eq(executions.agentType, agentType)).orderBy(desc(count()))
+        : await baseQuery.orderBy(desc(count()));
 
       const performance: AgentPerformance[] = results.map(result => ({
         agentType: result.agentType,
@@ -346,8 +351,8 @@ export class AgentService {
         successfulExecutions: result.successfulExecutions,
         failedExecutions: result.failedExecutions,
         averageDuration: result.averageDuration,
-        totalCost: result.totalCost,
-        averageCost: result.averageCost,
+        totalCost: Number(result.totalCost) || null,
+        averageCost: Number(result.averageCost) || null,
         lastExecuted: result.lastExecuted,
         successRate: result.totalExecutions > 0 
           ? (result.successfulExecutions / result.totalExecutions) * 100 
@@ -388,7 +393,7 @@ export class AgentService {
         totalExecutions: count(),
         successfulExecutions: sql<number>`COUNT(CASE WHEN status = 'completed' THEN 1 END)`,
         failedExecutions: sql<number>`COUNT(CASE WHEN status = 'failed' THEN 1 END)`,
-        averageDuration: avg(executions.durationMs),
+        averageDuration: sql<number>`AVG(duration_ms)`,
         totalCost: sum(executions.costUsd),
       })
       .from(executions)
@@ -425,8 +430,8 @@ export class AgentService {
         totalExecutions: overallStats.totalExecutions,
         successfulExecutions: overallStats.successfulExecutions,
         failedExecutions: overallStats.failedExecutions,
-        averageDuration: overallStats.averageDuration,
-        totalCost: overallStats.totalCost,
+        averageDuration: Number(overallStats.averageDuration) || null,
+        totalCost: Number(overallStats.totalCost) || null,
         recentTrend
       };
 
@@ -531,7 +536,7 @@ export class AgentService {
   /**
    * Validate agent configuration data
    */
-  private validateAgentConfigData(data: Omit<NewAgentConfiguration, 'id'>): void {
+  private validateAgentConfigData(data: any): void {
     if (!data.agentType) {
       throw new ValidationError('agentType is required', 'agentType');
     }
@@ -551,23 +556,23 @@ export class AgentService {
     }
 
     // Validate numeric constraints
-    if (data.maxCostPerExecution !== undefined && data.maxCostPerExecution < 0) {
+    if (data.maxCostPerExecution !== undefined && data.maxCostPerExecution !== null && data.maxCostPerExecution < 0) {
       throw new ValidationError('maxCostPerExecution cannot be negative', 'maxCostPerExecution', data.maxCostPerExecution);
     }
 
-    if (data.maxDurationMs !== undefined && data.maxDurationMs <= 0) {
+    if (data.maxDurationMs !== undefined && data.maxDurationMs !== null && data.maxDurationMs <= 0) {
       throw new ValidationError('maxDurationMs must be positive', 'maxDurationMs', data.maxDurationMs);
     }
 
-    if (data.timeoutMs !== undefined && data.timeoutMs <= 0) {
+    if (data.timeoutMs !== undefined && data.timeoutMs !== null && data.timeoutMs <= 0) {
       throw new ValidationError('timeoutMs must be positive', 'timeoutMs', data.timeoutMs);
     }
 
-    if (data.maxConcurrentExecutions !== undefined && data.maxConcurrentExecutions < 1) {
+    if (data.maxConcurrentExecutions !== undefined && data.maxConcurrentExecutions !== null && data.maxConcurrentExecutions < 1) {
       throw new ValidationError('maxConcurrentExecutions must be at least 1', 'maxConcurrentExecutions', data.maxConcurrentExecutions);
     }
 
-    if (data.cooldownMs !== undefined && data.cooldownMs < 0) {
+    if (data.cooldownMs !== undefined && data.cooldownMs !== null && data.cooldownMs < 0) {
       throw new ValidationError('cooldownMs cannot be negative', 'cooldownMs', data.cooldownMs);
     }
 

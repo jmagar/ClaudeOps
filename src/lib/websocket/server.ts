@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
 import { ConnectionManager } from './connectionManager';
-import { isAllowedOrigin } from '../../../server';
+import { isAllowedOrigin } from './origin';
 import { 
   ServerMessage, 
   createMessage,
@@ -39,9 +39,8 @@ export class WebSocketManager {
       try {
         // Validate origin using consolidated validation function
         const origin = request.headers.origin;
-        const host = request.headers.host;
         
-        if (!isAllowedOrigin(origin || '', host)) {
+        if (!isAllowedOrigin(origin || '')) {
           console.warn(`Rejected WebSocket connection from invalid origin: ${origin}`);
           ws.close(1008, 'Invalid origin');
           return;

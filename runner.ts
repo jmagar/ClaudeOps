@@ -1,6 +1,10 @@
+import { Buffer } from 'node:buffer';
+import { inspect } from 'node:util';
 import { AgentFactory, AgentType } from './src/lib/agents';
 import type { BaseAgentOptions } from './src/lib/agents/core/types';
 import { redactSecrets } from './src/lib/utils/redactSecrets';
+
+type AnalysisDepth = 'concise' | 'standard' | 'detailed';
 
 interface RunnerAgentOptions extends BaseAgentOptions {
   serviceName?: string;
@@ -10,7 +14,7 @@ interface RunnerAgentOptions extends BaseAgentOptions {
   includeDocker?: boolean;
   includeSecurityScan?: boolean;
   detailedServiceAnalysis?: boolean;
-  aiAnalysisDepth?: string;
+  aiAnalysisDepth?: AnalysisDepth;
 }
 
 async function runAgent() {
@@ -28,7 +32,6 @@ async function runAgent() {
   console.log(`🔍 Starting ${agentType} agent...\n`);
   
   try {
-    const agent = AgentFactory.create(agentType);
     // Build options based on agent type
     const options: RunnerAgentOptions = {
       timeout_ms: 300000, // 5 minutes
@@ -59,6 +62,29 @@ async function runAgent() {
       options.environment = 'production';
       options.enableSSL = true;
       options.generateCredentials = true;
+    } else if (agentType === 'docker-composer') {
+      if (!serviceName) {
+        console.error('❌ Docker composer requires a service name');
+        console.log('Usage: npx tsx runner.ts docker-composer <service-name>');
+        console.log('Example: npx tsx runner.ts docker-composer overseerr');
+        process.exit(1);
+      }
+      
+      // Validate service name (lowercase + trimmed)
+      const normalizedServiceName = serviceName.toLowerCase().trim();
+      const serviceNamePattern = /^[a-z0-9][a-z0-9._-]{0,62}$/;
+      if (!serviceNamePattern.test(normalizedServiceName)) {
+        console.error(`❌ Invalid service name: '${serviceName}'`);
+        console.error('Service name must:');
+        console.error('- Start with alphanumeric character');
+        console.error('- Contain only lowercase letters, digits, dots, underscores, hyphens');
+        console.error('- Be 1-63 characters long');
+        console.error('Example: overseerr, plex, jellyfin');
+        process.exit(1);
+      }
+      options.serviceName = normalizedServiceName;
+      options.environment = 'production';
+      options.enableSSL = true;
     } else if (agentType === 'system-health') {
       options.includeDocker = true;
       options.includeSecurityScan = true;
@@ -71,6 +97,9 @@ async function runAgent() {
     globalController = controller;
     options.abortController = controller;
     
+    // Create agent with options
+    const agent = AgentFactory.create(agentType, options);
+    
     // Add logging callbacks
     options.onLog = (message, level) => {
       if (typeof message !== 'string') return;
@@ -81,84 +110,67 @@ async function runAgent() {
         console.warn(`⚠️  ${message}`);
       } else if (level === 'debug') {
         console.debug(`🔎 ${message}`);
-      } else if (message.includes('🔧 Running:')) {
-        // Show tool execution in simplified format
-        const toolMatch = message.match(/🔧 Running:\s*([A-Za-z0-9_-]+)/);
+      } else if (message.includes('🔧') && message.includes(':')) {
+        // Show tool execution with actual command - matches BaseAgent pattern: "🔧 ToolName: {input}"
+        const toolMatch = message.match(/🔧\s*([A-Za-z0-9_-]+):\s*(.*)/);
         if (toolMatch) {
-          console.log(`  → Executing ${toolMatch[1]}...`);
+          const toolName = toolMatch[1];
+          const input = toolMatch[2];
+          // Parse command from input if it's Bash
+          if (toolName === 'Bash' && input) {
+            try {
+              const parsedInput = JSON.parse(input);
+              if (parsedInput.command) {
+                console.log(`  → Executing Bash: ${parsedInput.command}`);
+              } else {
+                console.log(`  → Executing ${toolName}: ${input.substring(0, 100)}...`);
+              }
+            } catch {
+              console.log(`  → Executing ${toolName}: ${input.substring(0, 100)}...`);
+            }
+          } else {
+            console.log(`  → Executing ${toolName}...`);
+          }
         }
-      } else if (message.includes('📊 Tool result:')) {
-        // Show condensed tool results with secret redaction
-        const cleanResult = redactSecrets(message.replace('📊 Tool result: ', ''));
-        console.log(`  ✓ ${cleanResult.substring(0, 200)}${cleanResult.length > 200 ? '...' : ''}`);
-      } else if (agentType === 'docker-deployment') {
-        // Docker-specific logging comes after general tool handling
-        if (message.includes('🚀') || message.includes('📊') || message.includes('⚙️') || message.includes('🔍')) {
-          console.log(message); // Show phase transitions
-        } else if (message.includes('✅')) {
-          console.log(message); // Show completions
-        } else if (message.includes('Phase')) {
-          console.log(`\n${message}`); // Show phase headers
-        }
-      } else if (message.includes('💭 Claude:')) {
-        // Show Claude's full thinking without extra formatting
-        console.log(message);
-      }
-      // Skip other debug/info logs for cleaner output
-    };
-    
-    const result = await agent.execute(options);
-    
-    if (result.status === 'completed') {
-      console.log(`✅ ${agentType} completed successfully\n`);
-      
-      // Header with summary  
-      console.log('='.repeat(80));
-      console.log(`📊 ${agentType.toUpperCase()} REPORT - ${new Date().toLocaleString()}`);
-      console.log('='.repeat(80));
-      const cost = typeof result.cost === 'number' ? result.cost : 0;
-      console.log(`💰 Analysis Cost: $${cost.toFixed(4)}`);
-      const durationSec = typeof result.duration === 'number' ? (result.duration / 1000).toFixed(2) : 'N/A';
-      console.log(`⏱️  Duration: ${durationSec}s`);
-      const input = result.usage?.input_tokens ?? 0;
-      const output = result.usage?.output_tokens ?? 0;
-      console.log(`🔧 Tokens: ${input} input / ${output} output`);
-      console.log('='.repeat(80));
-      console.log();
-      
-      // Robustly print the analysis report
-      let analysisOutput: string;
-      if (result.result == null) {
-        analysisOutput = '[No result returned]';
-      } else if (Buffer.isBuffer(result.result) || result.result instanceof Uint8Array) {
-        analysisOutput = Buffer.from(result.result).toString('utf-8');
-      } else if (typeof result.result === 'object') {
-        try {
-          analysisOutput = JSON.stringify(result.result, null, 2);
-        } catch (e) {
-          analysisOutput = String(result.result);
+      } else if (message.includes('✓')) {
+        // Show condensed tool results with secret redaction - matches BaseAgent pattern: "✓ result"
+        const resultMatch = message.match(/✓\s*(.*)/);
+        if (resultMatch) {
+          // Temporarily disable redaction to see raw output
+          const rawResult = resultMatch[1];
+          // Show more content but still truncate very long results
+          const maxLength = 800;
+          const truncated = rawResult.length > maxLength ? rawResult.substring(0, maxLength) + '...' : rawResult;
+          console.log(`  ✓ ${truncated}`); 
         }
       } else {
-        analysisOutput = String(result.result);
+        // Show ALL messages for full visibility
+        console.log(`  ${message}`);
       }
-      console.log(analysisOutput);
-      console.log();
-      console.log('='.repeat(80));
-
-
+    };
+    
+    // Execute the agent
+    console.log(`🚀 Executing ${agentType} agent...`);
+    const result = await agent.execute(options);
+    
+    // Show execution results
+    if (result.status === 'completed') {
+      console.log(`\n✅ ${agentType} agent completed successfully`);
+      if (result.result) {
+        console.log(`📋 Result: ${result.result}`);
+      }
     } else {
-      process.exitCode = 1;
-      console.log('='.repeat(80));
-      console.error(`❌ ${agentType.toUpperCase()} FAILED`);
-      console.log('='.repeat(80));
-      const stringifiedError = typeof result.error === 'string' 
-        ? result.error 
-        : require('util').inspect(result.error, { depth: null, colors: false });
-      console.error('Error:', stringifiedError);
+      console.error(`\n❌ ${agentType} agent failed`);
+      if (result.error) {
+        const stringifiedError = typeof result.error === 'string' 
+          ? result.error 
+          : inspect(result.error, { depth: null, colors: false });
+        console.error('Error:', stringifiedError);
+      }
       console.log('\n📋 Execution Logs:');
       console.log('-'.repeat(50));
       if (Array.isArray(result.logs)) {
-        result.logs.forEach(log => console.log(log));
+        result.logs.forEach((log: string) => console.log(log));
       }
     }
     
@@ -214,6 +226,13 @@ process.on('exit', () => {
 });
 
 function getAgentDescription(type: string): string {
+  try {
+    // Prefer dynamic description if the agent exposes one
+    const cfg = AgentFactory.getAgentConfig(type as AgentType);
+    if (cfg?.description) return cfg.description;
+  } catch {
+    // ignore and fall back to static map
+  }
   const descriptions: Record<string, string> = {
     'system-health': 'System health analysis',
     'docker-deployment': 'Deploy Docker services (requires service name)',

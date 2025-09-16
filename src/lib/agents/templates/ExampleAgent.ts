@@ -2,7 +2,8 @@ import { BaseAgent } from '../core/BaseAgent';
 import type { 
   BaseAgentOptions, 
   AgentConfig,
-  TokenUsage
+  TokenUsage,
+  PermissionMode
 } from '../core/types';
 
 /**
@@ -224,7 +225,7 @@ SAFETY AND ETHICS:
   /**
    * OPTIONAL: Override permission mode if your agent needs different permissions
    */
-  getPermissionMode(): BaseAgentOptions['permissionMode'] {
+  getPermissionMode(): PermissionMode {
     // Most agents should use 'acceptEdits' for tool access
     // Use 'plan' if your agent needs to plan complex operations
     // Use 'bypassPermissions' only if absolutely necessary (not recommended)

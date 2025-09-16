@@ -9,12 +9,11 @@ export { PermissionManager } from './core/PermissionManager';
 // Import agent implementations for factory
 import { SystemHealthAgent } from './systemHealthAgent';
 import { DockerDeploymentAgent } from './dockerDeploymentAgent';
-import { InfrastructureAnalysisAgent } from './infrastructureAnalysisAgent';
-import { ServiceResearchAgent } from './serviceResearchAgent';
-import { ConfigGeneratorAgent } from './configGeneratorAgent';
-import { SecurityCredentialsAgent } from './securityCredentialsAgent';
-import { DeploymentExecutorAgent } from './deploymentExecutorAgent';
-import { VerificationAgent } from './verificationAgent';
+import { DockerComposerAgent } from './dockerComposerAgent';
+
+// Import types needed for factory
+import type { BaseAgentOptions, AgentType, AgentConfig, LogCallback, ProgressCallback, ProgressUpdate } from './core/types';
+import { BaseAgent } from './core/BaseAgent';
 
 // Types and interfaces
 export type {
@@ -44,12 +43,7 @@ export type {
 // Specific agent implementations
 export { SystemHealthAgent } from './systemHealthAgent';
 export { DockerDeploymentAgent } from './dockerDeploymentAgent';
-export { InfrastructureAnalysisAgent } from './infrastructureAnalysisAgent';
-export { ServiceResearchAgent } from './serviceResearchAgent';
-export { ConfigGeneratorAgent } from './configGeneratorAgent';
-export { SecurityCredentialsAgent } from './securityCredentialsAgent';
-export { DeploymentExecutorAgent } from './deploymentExecutorAgent';
-export { VerificationAgent } from './verificationAgent';
+export { DockerComposerAgent } from './dockerComposerAgent';
 
 // Agent factory for creating different agent types
 export class AgentFactory {
@@ -63,52 +57,27 @@ export class AgentFactory {
   /**
    * Create an agent of the specified type
    */
-  static create<T extends BaseAgent>(
+  static create(
     type: AgentType,
     options: BaseAgentOptions = {}
-  ): T {
+  ): BaseAgent {
     // Merge with default options for future use
     const mergedOptions = {
       ...this.defaultOptions,
       ...options
     };
 
-    let agent: T;
-
     switch (type) {
       case 'system-health':
-        agent = new SystemHealthAgent() as T;
-        break;
+        return new SystemHealthAgent();
       case 'docker-deployment':
-        agent = new DockerDeploymentAgent() as T;
-        break;
-      case 'infrastructure-analysis':
-        agent = new InfrastructureAnalysisAgent() as T;
-        break;
-      case 'service-research':
-        agent = new ServiceResearchAgent() as T;
-        break;
-      case 'config-generator':
-        agent = new ConfigGeneratorAgent() as T;
-        break;
-      case 'security-credentials':
-        agent = new SecurityCredentialsAgent() as T;
-        break;
-      case 'deployment-executor':
-        agent = new DeploymentExecutorAgent() as T;
-        break;
-      case 'verification':
-        agent = new VerificationAgent() as T;
-        break;
+        return new DockerDeploymentAgent();
+      case 'docker-composer':
+        return new DockerComposerAgent();
       
       default:
         throw new Error(`Unknown agent type: ${type}. Available types: ${this.getAvailableTypes().join(', ')}`);
     }
-
-    // Store merged options for the agent to use in execute if no options are provided
-    (agent as any)._factoryDefaultOptions = mergedOptions;
-    
-    return agent;
   }
 
   /**
@@ -118,12 +87,7 @@ export class AgentFactory {
     return [
       'system-health',
       'docker-deployment',
-      'infrastructure-analysis',
-      'service-research',
-      'config-generator',
-      'security-credentials',
-      'deployment-executor',
-      'verification'
+      'docker-composer'
     ];
   }
 
@@ -138,12 +102,12 @@ export class AgentFactory {
   /**
    * Create an agent with pre-configured hooks and utilities
    */
-  static createWithDefaults<T extends BaseAgent>(
+  static createWithDefaults(
     type: AgentType,
     options: BaseAgentOptions = {},
     setupDefaults: boolean = true
-  ): T {
-    const agent = this.create<T>(type, options);
+  ): BaseAgent {
+    const agent = this.create(type, options);
 
     if (setupDefaults) {
       // You could set up default hooks, error handlers, etc. here

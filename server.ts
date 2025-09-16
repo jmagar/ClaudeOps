@@ -2,6 +2,7 @@ import { createServer, IncomingMessage } from 'http';
 import next from 'next';
 import { WebSocketServer } from 'ws';
 import { WebSocketManager, setWebSocketManager } from './src/lib/websocket/server';
+import { isAllowedOrigin, parseAllowedOrigins } from './src/lib/websocket/origin';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || process.env.HOST || '0.0.0.0';
@@ -11,53 +12,15 @@ const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-// Function to check if origin is allowed for WebSocket connections
-export const isAllowedOrigin = (origin: string, host?: string): boolean => {
-  const allowedOrigins = parseAllowedOrigins(process.env.WS_ALLOWED_ORIGINS);
-  
-  // In development, allow localhost connections
-  if (process.env.NODE_ENV !== 'production') {
-    return true;
-  }
-  
-  // If no origins are configured in production, reject all
-  if (allowedOrigins.length === 0) {
-    return false;
-  }
-  
-  return allowedOrigins.some(allowedOrigin => {
-    try {
-      const originUrl = new URL(origin);
-      const allowedUrl = new URL(allowedOrigin);
-      
-      // Normalize ports for comparison (ws:80, wss:443 defaults)
-      const normalizePort = (url: URL): string => {
-        if (url.port) return url.port;
-        return url.protocol === 'https:' || url.protocol === 'wss:' ? '443' : '80';
-      };
-      
-      return originUrl.hostname === allowedUrl.hostname && 
-             normalizePort(originUrl) === normalizePort(allowedUrl) &&
-             originUrl.protocol === allowedUrl.protocol;
-    } catch {
-      return origin === allowedOrigin;
-    }
-  });
-};
-
-// Parse allowed WebSocket origins
-const parseAllowedOrigins = (value: string | undefined): string[] => {
-  if (!value) return [];
-  return value.split(',').map(origin => origin.trim()).filter(Boolean);
-};
 
 app.prepare().then(() => {
   const server = createServer((req, res) => {
     const forwardedProto = req.headers['x-forwarded-proto']?.toString()?.split(',')[0]?.trim();
     const forwardedHost = req.headers['x-forwarded-host']?.toString()?.split(',')[0]?.trim();
     const protocol = forwardedProto || 'http';
-    const host = forwardedHost || req.headers.host || hostname;
-    const url = new URL(req.url || '/', `${protocol}://${host}`);
+    const rawHost = forwardedHost || req.headers.host || hostname;
+    const safeHost = (rawHost === '::' || rawHost === '0.0.0.0' || !rawHost) ? 'localhost' : rawHost;
+    const url = new URL(req.url || '/', `${protocol}://${safeHost}`);
     
     // Preserve multi-value query parameters
     const query: Record<string, string | string[]> = {};
@@ -138,7 +101,7 @@ app.prepare().then(() => {
       }
     }
     
-    const isAllowed = isAllowedOrigin(origin, host);
+    const isAllowed = isAllowedOrigin(origin);
     
     if (!isAllowed) {
       console.warn(`Rejected WebSocket connection from unauthorized origin: ${origin}`);

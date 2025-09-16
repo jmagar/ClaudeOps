@@ -23,7 +23,7 @@ import { metricsCollector } from '@/lib/monitoring/metricsCollector';
 import { alertManager } from '@/lib/monitoring/alertManager';
 import { monitoringScheduler } from '@/lib/monitoring/scheduler';
 import type { SystemHealthStatus, MetricsFilter } from '@/lib/types/database';
-import type { SystemMonitorConfig, SystemStats } from '@/lib/monitoring/systemMonitor';
+import type { SystemMonitorConfig, SystemStats, SystemThresholds } from '@/lib/monitoring/systemMonitor';
 import type { MetricsCollectionConfig } from '@/lib/monitoring/metricsCollector';
 import type { SchedulerStats } from '@/lib/monitoring/scheduler';
 import type { Alert } from '@/lib/monitoring/alertManager';
@@ -178,7 +178,14 @@ export const GET = withErrorHandler<SystemMetricsResponse | MetricsHistoryRespon
     // AuthN/Z: require internal token or session-based admin (replace with your real check)
     const token = req.headers.get('x-internal-token');
     if (process.env.INTERNAL_API_TOKEN && token !== process.env.INTERNAL_API_TOKEN) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ 
+        success: false, 
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Unauthorized'
+        },
+        timestamp: new Date().toISOString()
+      }, { status: 401 });
     }
     
     const searchParams = req.nextUrl.searchParams;
@@ -231,7 +238,14 @@ export const POST = withErrorHandler<ActionResult>(
     // AuthN/Z + CSRF/internal guard (swap with your session/role check if available)
     const token = req.headers.get('x-internal-token');
     if (process.env.INTERNAL_API_TOKEN && token !== process.env.INTERNAL_API_TOKEN) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ 
+        success: false, 
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Unauthorized'
+        },
+        timestamp: new Date().toISOString()
+      }, { status: 401 });
     }
     
     // Validate body
@@ -242,9 +256,10 @@ export const POST = withErrorHandler<ActionResult>(
       z.object({ action: z.literal('run_health_check') }),
       z.object({ action: z.literal('acknowledge_alert'), alertId: z.string().min(1), acknowledgedBy: z.string().optional() }),
       z.object({ action: z.literal('resolve_alert'), alertId: z.string().min(1), resolvedBy: z.string().optional() }),
-      z.object({ action: z.literal('update_thresholds'), thresholds: z.record(z.unknown()) })
+      z.object({ action: z.literal('update_thresholds'), thresholds: z.record(z.string(), z.unknown()) })
     ]);
-    const parsed = ActionSchema.parse(await req.json()) as MonitoringActionParsed;
+    const requestBody = await req.json();
+    const parsed = ActionSchema.parse(requestBody) as MonitoringActionParsed;
     const { action } = parsed;
     
     let result: ActionResult;
@@ -724,8 +739,24 @@ async function updateThresholds(thresholds: Record<string, unknown>) {
       disk: validatedThresholds.disk !== undefined ? Math.max(0, Math.min(100, validatedThresholds.disk)) : undefined
     };
     
-    // Update system monitor thresholds
-    systemMonitor.updateConfig({ thresholds: clampedThresholds as Partial<SystemMonitorConfig['thresholds']> });
+    // Update system monitor thresholds - provide complete thresholds with defaults
+    const currentConfig = systemMonitor.getConfig();
+    const completeThresholds: SystemThresholds = {
+      cpu: clampedThresholds.cpu !== undefined ? 
+        { warning: clampedThresholds.cpu, critical: Math.min(clampedThresholds.cpu + 20, 100) } : 
+        currentConfig.thresholds.cpu,
+      memory: clampedThresholds.memory !== undefined ? 
+        { warning: clampedThresholds.memory, critical: Math.min(clampedThresholds.memory + 15, 100) } : 
+        currentConfig.thresholds.memory,
+      disk: clampedThresholds.disk !== undefined ? 
+        { warning: clampedThresholds.disk, critical: Math.min(clampedThresholds.disk + 10, 100) } : 
+        currentConfig.thresholds.disk,
+      load: clampedThresholds.loadAverage !== undefined ? 
+        { warning: clampedThresholds.loadAverage, critical: clampedThresholds.loadAverage + 2.0 } : 
+        currentConfig.thresholds.load
+    };
+    
+    systemMonitor.updateConfig({ thresholds: completeThresholds });
     
     return {
       message: 'Thresholds updated successfully',

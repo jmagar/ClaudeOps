@@ -1,27 +1,13 @@
 import { BaseAgent } from './core/BaseAgent';
-import type { BaseAgentOptions, BaseAgentResult, AgentConfig, AgentError, ErrorContext, ErrorRecovery, TokenUsage } from './core/types';
-import { InfrastructureAnalysisAgent } from './infrastructureAnalysisAgent';
-import { ServiceResearchAgent } from './serviceResearchAgent';
-import { ConfigGeneratorAgent } from './configGeneratorAgent';
-import { SecurityCredentialsAgent } from './securityCredentialsAgent';
-import { DeploymentExecutorAgent } from './deploymentExecutorAgent';
-import { VerificationAgent } from './verificationAgent';
+import type { BaseAgentOptions, AgentConfig, AgentError, ErrorContext, ErrorRecovery } from './core/types';
 
 interface DockerDeploymentOptions extends BaseAgentOptions {
-  serviceName: string;
-  forceLatest?: boolean;
-  skipExistingCheck?: boolean;
-  enableSSL?: boolean;
-  customNetwork?: string;
-  environment?: 'production' | 'staging' | 'development';
-  dataRetentionDays?: number;
+  configDirectory: string; // Path to approved docker-compose configs
+  serviceName?: string; // Optional for logging/identification
+  dryRun?: boolean; // Preview deployment without executing
   backupBeforeDeployment?: boolean;
-  generateCredentials?: boolean;
-  securityScanEnabled?: boolean;
+  rollbackOnFailure?: boolean;
   monitoringEnabled?: boolean;
-  customPorts?: Record<string, number>;
-  volumeMounts?: Record<string, string>;
-  environmentVariables?: Record<string, string>;
 }
 
 export class DockerDeploymentAgent extends BaseAgent<DockerDeploymentOptions> {
@@ -30,368 +16,169 @@ export class DockerDeploymentAgent extends BaseAgent<DockerDeploymentOptions> {
   }
 
   getAllowedTools(): string[] {
-    // Orchestrator doesn't need many tools - the subagents handle specific tasks
-    return ['Read', 'Write'];
+    return [
+      'Read', 'Write',           // Configuration and documentation
+      'Bash',                    // Docker commands and system analysis
+      'Glob', 'Grep',           // File discovery and analysis
+      'Task'                     // Sub-agent coordination
+    ];
   }
 
-  async execute(options: DockerDeploymentOptions): Promise<BaseAgentResult> {
-    const startTime = Date.now();
-    const logs: string[] = [];
-    
-    try {
-      logs.push('🚀 Starting parallel Docker deployment orchestration...');
-      logs.push(`📋 Service: ${options.serviceName}`);
-      logs.push(`🏗️  Environment: ${options.environment || 'production'}`);
-      
-      // Phase 1: Parallel Information Gathering
-      logs.push('📊 Phase 1: Parallel information gathering...');
-      if (options.onLog) options.onLog('📊 Phase 1: Parallel information gathering...', 'info');
-      
-      const [infraResult, researchResult] = await Promise.all([
-        new InfrastructureAnalysisAgent().execute({
-          targetService: options.serviceName,
-          scanDepth: 'comprehensive',
-          timeout_ms: 300000,
-          maxTurns: 50,
-          onLog: options.onLog ? (msg, level) => options.onLog!(`[Infrastructure] ${msg}`, level) : undefined,
-          onProgress: options.onProgress
-        }),
-        new ServiceResearchAgent().execute({
-          serviceName: options.serviceName,
-          includeSecurityResearch: true,
-          includeProductionTips: true,
-          timeout_ms: 300000,
-          maxTurns: 50,
-          onLog: options.onLog ? (msg, level) => options.onLog!(`[Research] ${msg}`, level) : undefined,
-          onProgress: options.onProgress
-        })
-      ]);
-      
-      if (infraResult.status !== 'completed' || researchResult.status !== 'completed') {
-        throw new Error(`Phase 1 failed: Infrastructure=${infraResult.status}, Research=${researchResult.status}`);
-      }
-      
-      logs.push(`✅ Infrastructure analysis completed (Cost: $${infraResult.cost.toFixed(4)})`);
-      if (options.onLog) options.onLog(`✅ Infrastructure analysis completed (Cost: $${infraResult.cost.toFixed(4)})`, 'info');
-      logs.push(`✅ Service research completed (Cost: $${researchResult.cost.toFixed(4)})`);
-      if (options.onLog) options.onLog(`✅ Service research completed (Cost: $${researchResult.cost.toFixed(4)})`, 'info');
-      
-      // Parse and merge results
-      let infrastructureData: any;
-      let serviceData: any;
-      
-      try {
-        infrastructureData = JSON.parse(infraResult.result);
-        serviceData = JSON.parse(researchResult.result);
-      } catch (parseError) {
-        throw new Error(`Failed to parse Phase 1 results: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
-      }
-      
-      const deploymentContext = {
-        infrastructure: infrastructureData,
-        serviceInfo: serviceData,
-        serviceName: options.serviceName,
-        environment: options.environment || 'production',
-        enableSSL: options.enableSSL !== false,
-        customPorts: options.customPorts,
-        volumeMounts: options.volumeMounts,
-        environmentVariables: options.environmentVariables
-      };
-      
-      // Phase 2: Parallel Configuration Generation
-      logs.push('⚙️  Phase 2: Parallel configuration generation...');
-      if (options.onLog) options.onLog('⚙️  Phase 2: Parallel configuration generation...', 'info');
-      
-      const [configResult, securityResult] = await Promise.all([
-        new ConfigGeneratorAgent().execute({
-          context: JSON.stringify(deploymentContext),
-          includeEnvFile: true,
-          enableReverseProxy: true,
-          timeout_ms: 180000,
-          maxTurns: 30,
-          onLog: options.onLog ? (msg, level) => options.onLog!(`[Config] ${msg}`, level) : undefined,
-          onProgress: options.onProgress
-        }),
-        new SecurityCredentialsAgent().execute({
-          serviceName: options.serviceName,
-          generateSSL: options.enableSSL !== false,
-          generateAPIKeys: options.generateCredentials !== false,
-          generateDatabaseCredentials: true,
-          encryptionLevel: options.environment === 'production' ? 'enterprise' : 'strong',
-          timeout_ms: 120000,
-          maxTurns: 20,
-          onLog: options.onLog ? (msg, level) => options.onLog!(`[Security] ${msg}`, level) : undefined,
-          onProgress: options.onProgress
-        })
-      ]);
-      
-      if (configResult.status !== 'completed' || securityResult.status !== 'completed') {
-        throw new Error(`Phase 2 failed: Configuration=${configResult.status}, Security=${securityResult.status}`);
-      }
-      
-      logs.push(`✅ Configuration generated (Cost: $${configResult.cost.toFixed(4)})`);
-      logs.push(`✅ Security credentials generated (Cost: $${securityResult.cost.toFixed(4)})`);
-      
-      // Phase 3: Sequential Deployment
-      logs.push('🚀 Phase 3: Deployment execution...');
-      if (options.onLog) options.onLog('🚀 Phase 3: Deployment execution...', 'info');
-      
-      const deployResult = await new DeploymentExecutorAgent().execute({
-        configuration: configResult.result,
-        credentials: securityResult.result,
-        dryRun: false,
-        rollbackOnFailure: true,
-        deploymentStrategy: options.environment === 'production' ? 'staged' : 'immediate',
-        timeout_ms: 300000,
-        maxTurns: 40,
-        onLog: options.onLog ? (msg, level) => options.onLog!(`[Deploy] ${msg}`, level) : undefined,
-        onProgress: options.onProgress
-      });
-      
-      if (deployResult.status !== 'completed') {
-        // If deployment failed, still continue to verification to get diagnostic info
-        logs.push(`⚠️  Deployment completed with status: ${deployResult.status} (Cost: $${deployResult.cost.toFixed(4)})`);
-      } else {
-        logs.push(`✅ Deployment executed successfully (Cost: $${deployResult.cost.toFixed(4)})`);
-      }
-      
-      // Phase 4: Verification
-      logs.push('🔍 Phase 4: Deployment verification...');
-      if (options.onLog) options.onLog('🔍 Phase 4: Deployment verification...', 'info');
-      
-      const verifyResult = await new VerificationAgent().execute({
-        serviceName: options.serviceName,
-        deployment: deployResult.result,
-        comprehensiveTest: true,
-        performanceTest: options.environment === 'production',
-        securityScan: options.securityScanEnabled !== false,
-        timeout_ms: 120000,
-        maxTurns: 30,
-        onLog: options.onLog ? (msg, level) => options.onLog!(`[Verify] ${msg}`, level) : undefined,
-        onProgress: options.onProgress
-      });
-      
-      logs.push(`✅ Verification completed with status: ${verifyResult.status} (Cost: $${verifyResult.cost.toFixed(4)})`);
-      
-      // Calculate totals and generate report
-      const allResults = [infraResult, researchResult, configResult, securityResult, deployResult, verifyResult];
-      const totalCost = allResults.reduce((sum, r) => sum + r.cost, 0);
-      const totalDuration = Date.now() - startTime;
-      
-      const deploymentReport = this.generateDeploymentReport(
-        deploymentContext, 
-        configResult, 
-        deployResult, 
-        verifyResult,
-        totalCost,
-        totalDuration
-      );
-      
-      // Determine overall status
-      let overallStatus: 'completed' | 'failed' | 'timeout' | 'cancelled' = 'completed';
-      if (deployResult.status === 'failed' || verifyResult.status === 'failed') {
-        overallStatus = 'failed';
-      } else if (deployResult.status === 'timeout' || verifyResult.status === 'timeout') {
-        overallStatus = 'timeout';
-      }
-      
-      logs.push(`🎯 Deployment orchestration ${overallStatus === 'completed' ? 'completed successfully' : overallStatus}`);
-      logs.push(`💰 Total cost: $${totalCost.toFixed(4)}`);
-      logs.push(`⏱️  Total duration: ${(totalDuration / 1000).toFixed(1)}s`);
-      
-      return {
-        executionId: `deploy-${Date.now()}`,
-        agentType: this.getAgentType(),
-        status: overallStatus,
-        result: deploymentReport,
-        cost: totalCost,
-        duration: totalDuration,
-        usage: this.combineUsage(allResults),
-        logs,
-        timestamp: new Date().toISOString(),
-        summary: `${overallStatus === 'completed' ? 'Successfully deployed' : 'Deployment failed for'} ${options.serviceName} using parallel subagents - Total cost: $${totalCost.toFixed(4)}, Duration: ${(totalDuration / 1000).toFixed(1)}s`
-      };
-      
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      
-      logs.push(`❌ Deployment orchestration failed: ${errorMessage}`);
-      
-      return {
-        executionId: `deploy-failed-${Date.now()}`,
-        agentType: this.getAgentType(),
-        status: 'failed',
-        result: JSON.stringify({ 
-          error: errorMessage, 
-          logs,
-          partialResults: 'Check logs for any partial progress'
-        }, null, 2),
-        cost: 0,
-        duration,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_tokens: 0,
-          cache_read_tokens: 0
-        },
-        logs,
-        timestamp: new Date().toISOString(),
-        error: errorMessage
-      };
-    }
-  }
 
-  private generateDeploymentReport(
-    context: any,
-    configResult: BaseAgentResult,
-    deployResult: BaseAgentResult,
-    verifyResult: BaseAgentResult,
-    totalCost: number,
-    totalDuration: number
-  ): string {
-    const configData = JSON.parse(configResult.result || '{}');
-    const deployData = JSON.parse(deployResult.result || '{}');
-    const verifyData = JSON.parse(verifyResult.result || '{}');
-    
-    return JSON.stringify({
-      deploymentSummary: {
-        serviceName: context.serviceName,
-        environment: context.environment,
-        status: deployResult.status === 'completed' && verifyResult.status === 'completed' ? 'success' : 'partial',
-        timestamp: new Date().toISOString(),
-        totalCost: totalCost,
-        totalDuration: totalDuration
-      },
-      infrastructure: {
-        deploymentDirectory: configData.deploymentDirectory || 'unknown',
-        servicePort: configData.configuration?.ports?.primary || 'unknown',
-        networks: configData.configuration?.networks || [],
-        volumes: configData.configuration?.volumes || []
-      },
-      deployment: {
-        containers: deployData.containers || {},
-        services: deployData.services || {},
-        infrastructure: deployData.infrastructure || {}
-      },
-      verification: {
-        status: verifyData.verificationStatus || 'unknown',
-        healthScore: verifyData.healthScore || 0,
-        containers: verifyData.containers || {},
-        serviceAvailability: verifyData.serviceAvailability || {}
-      },
-      parallelExecution: {
-        phase1Duration: 'Infrastructure + Research ran in parallel',
-        phase2Duration: 'Configuration + Security ran in parallel',
-        phase3Duration: 'Deployment executed sequentially',
-        phase4Duration: 'Verification executed sequentially',
-        efficiencyGain: 'Estimated 40-60% time reduction vs sequential execution'
-      },
-      costs: {
-        infrastructureAnalysis: configResult.cost || 0,
-        serviceResearch: deployResult.cost || 0,
-        configGeneration: configResult.cost || 0,
-        securityCredentials: deployResult.cost || 0,
-        deploymentExecution: deployResult.cost || 0,
-        verification: verifyResult.cost || 0,
-        total: totalCost
-      },
-      nextSteps: [
-        'Monitor service health and performance',
-        'Set up automated backups and monitoring',
-        'Review security configurations and update as needed',
-        'Test disaster recovery procedures',
-        'Schedule regular maintenance and updates'
-      ]
-    }, null, 2);
-  }
-
-  private combineUsage(results: BaseAgentResult[]): TokenUsage {
-    return results.reduce((combined, result) => ({
-      input_tokens: combined.input_tokens + (result.usage.input_tokens || 0),
-      output_tokens: combined.output_tokens + (result.usage.output_tokens || 0),
-      cache_creation_tokens: combined.cache_creation_tokens + (result.usage.cache_creation_tokens || 0),
-      cache_read_tokens: combined.cache_read_tokens + (result.usage.cache_read_tokens || 0)
-    }), {
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0
-    });
-  }
 
   buildPrompt(options: DockerDeploymentOptions): string {
-    // This agent is now an orchestrator that delegates to specialized subagents
-    // The buildPrompt is only called by the base class execute() method which we override
-    // This is maintained for interface compatibility but won't be used in practice
     return `
-This Docker Deployment Agent has been transformed into a parallel orchestrator.
-It coordinates 6 specialized subagents:
-1. Infrastructure Analysis Agent - analyzes existing Docker infrastructure
-2. Service Research Agent - researches service documentation and best practices
-3. Configuration Generator Agent - generates Docker Compose configurations  
-4. Security Credentials Agent - generates passwords and certificates
-5. Deployment Executor Agent - executes the actual deployment
-6. Verification Agent - verifies deployment success
+You are a Docker Deployment Executor that deploys pre-approved Docker configurations with monitoring and verification.
 
-The orchestrator executes these agents in parallel phases:
-- Phase 1: Infrastructure Analysis + Service Research (parallel)
-- Phase 2: Configuration Generation + Security Credentials (parallel)  
-- Phase 3: Deployment Execution (sequential)
-- Phase 4: Verification (sequential)
+## DEPLOYMENT CONFIGURATION
+Configuration Directory: ${options.configDirectory}
+Service Name: ${options.serviceName || 'Unknown'}
+Dry Run Mode: ${options.dryRun ? 'Enabled (preview only)' : 'Disabled (live deployment)'}
+Backup Before Deployment: ${options.backupBeforeDeployment !== false}
+Rollback on Failure: ${options.rollbackOnFailure !== false}
+Monitoring Enabled: ${options.monitoringEnabled !== false}
 
-This approach provides 40-60% time reduction compared to sequential execution.
+## EXECUTION PHASES
+
+### PHASE 1: Pre-Deployment Validation
+**Validate the approved configuration:**
+
+1. **Configuration Validation**: Use Read to verify all required files exist:
+   - \`docker-compose.yaml\` in ${options.configDirectory}
+   - \`.env\` file with required variables
+   - Any referenced configuration files (nginx.conf, etc.)
+
+2. **System Readiness**: Use Bash to check deployment prerequisites:
+   - \`docker --version && docker compose version\`
+   - \`docker system info\`
+   - Check available disk space and memory
+   - Verify ports are available for deployment
+
+3. **Backup Current State** (if enabled):
+   - \`docker compose ps\` to see current containers
+   - Backup any existing data volumes
+   - Create deployment checkpoint
+
+### PHASE 2: Deployment Execution
+**Execute the deployment process:**
+
+${options.dryRun ? 
+  `**DRY RUN MODE** - Preview commands without execution:
+   1. Show what would be deployed
+   2. Validate docker-compose.yaml syntax
+   3. Preview resource requirements
+   4. Identify potential conflicts` :
+  `**LIVE DEPLOYMENT** - Execute actual deployment:
+   1. Pull required Docker images
+   2. Stop existing containers (if any)
+   3. Deploy services using docker-compose up
+   4. Monitor deployment progress in real-time`}
+
+### PHASE 3: Post-Deployment Verification
+**Verify deployment success:**
+
+1. **Container Health Checks**: Use Bash to verify all containers are running:
+   - \`docker compose ps\`
+   - \`docker compose logs --tail=50\`
+   - Check health status of all services
+
+2. **Service Connectivity**: Test service endpoints and connectivity:
+   - HTTP/HTTPS endpoint testing
+   - Database connectivity (if applicable)
+   - Inter-service communication verification
+
+3. **Security Validation**: Verify security configurations:
+   - SSL certificate status
+   - Port binding validation
+   - Network isolation checks
+
+### PHASE 4: Monitoring & Documentation
+**Set up monitoring and provide operational guidance:**
+
+1. **Resource Monitoring**: Monitor container resource usage
+2. **Log Configuration**: Set up log collection and rotation
+3. **Health Monitoring**: Configure ongoing health checks
+4. **Documentation**: Generate operational runbook
+
+## DEPLOYMENT SAFETY
+- Always validate configurations before deployment
+- ${options.rollbackOnFailure ? 'Automatically rollback on deployment failure' : 'Manual rollback required on failure'}
+- Monitor deployment progress with real-time logging
+- Provide clear success/failure indicators
+- Generate comprehensive deployment reports
+
+## TOOLS AVAILABLE
+- Read: Read and validate configuration files
+- Write: Create deployment logs and documentation
+- Bash: Execute Docker commands and system checks
+- Glob/Grep: Analyze logs and system state
+
+## OUTPUT REQUIREMENTS
+Provide comprehensive deployment reporting:
+1. **Pre-Deployment Validation Results**
+2. **Deployment Execution Log** (real-time progress)
+3. **Service Health Status** (all containers and endpoints)
+4. **Access Information** (URLs, ports, credentials)
+5. **Operational Guidance** (monitoring, logs, maintenance)
+6. **Troubleshooting Information** (common issues and solutions)
+
+**CRITICAL**: This agent assumes configuration has already been approved by the user via DockerComposerAgent. It focuses purely on deployment execution and verification.
 `;
   }
 
   getSystemPrompt(): string {
     return `
-You are a Docker Deployment Orchestrator that coordinates multiple specialized subagents for efficient parallel deployment execution.
+You are a Docker Deployment Executor specializing in reliable deployment of pre-approved Docker configurations with comprehensive monitoring and verification.
 
-ORCHESTRATION CAPABILITIES:
-- Parallel agent execution and coordination
-- Cross-agent communication and data flow
-- Error handling and recovery across multiple agents
-- Resource optimization and cost management
-- Timeline coordination and dependency management
-- Quality assurance and validation orchestration
+CORE CAPABILITIES:
+- Pre-approved configuration validation and deployment
+- Container orchestration and lifecycle management
+- Real-time deployment monitoring and progress tracking
+- Comprehensive health checking and service verification
+- Automated rollback and error recovery procedures
+- Operational documentation and maintenance guidance
 
-SUBAGENT COORDINATION:
-- Infrastructure Analysis Agent: Docker environment scanning and pattern analysis
-- Service Research Agent: Online research for service documentation and best practices
-- Configuration Generator Agent: Docker Compose and environment file generation
-- Security Credentials Agent: Cryptographic credential and certificate generation
-- Deployment Executor Agent: Actual deployment execution and monitoring
-- Verification Agent: Comprehensive deployment validation and health checking
+DEPLOYMENT METHODOLOGY:
+- Validate all configurations before deployment execution
+- Execute phased deployment with safety checkpoints
+- Monitor deployment progress with real-time feedback
+- Verify service health and connectivity post-deployment
+- Generate comprehensive operational documentation
+- Provide troubleshooting guidance and maintenance procedures
 
-EXECUTION STRATEGY:
-- Phase 1: Parallel information gathering (Infrastructure + Research)
-- Phase 2: Parallel configuration creation (Config + Security)
-- Phase 3: Sequential deployment execution with monitoring
-- Phase 4: Sequential verification and validation
+TECHNICAL EXPERTISE:
+- Docker Compose deployment execution and monitoring
+- Container health checking and service verification
+- Network connectivity and security validation
+- Volume management and data persistence verification
+- SSL/TLS certificate validation and monitoring
+- Performance monitoring and resource optimization
+- Log collection and analysis for troubleshooting
 
-PERFORMANCE OPTIMIZATION:
-- Maximize parallelization where possible
-- Minimize agent execution time through focused delegation
-- Optimize resource usage across all subagents
-- Provide 40-60% time reduction vs sequential execution
-- Comprehensive cost tracking and optimization
+EXECUTION APPROACH:
+- Validate pre-approved configurations thoroughly
+- Execute deployment with comprehensive monitoring
+- Verify all services are healthy and accessible
+- Generate detailed deployment reports and logs
+- Provide operational guidance for ongoing maintenance
+- Implement automated rollback on deployment failures
 
-ERROR HANDLING:
-- Graceful degradation when subagents fail
-- Rollback capabilities across deployment phases
-- Comprehensive error reporting and diagnosis
-- Recovery strategies and retry mechanisms
-- Partial success handling and continuation
+SAFETY AND RELIABILITY:
+- Always validate configurations before deployment
+- Implement checkpoint-based deployment with rollback capability
+- Monitor deployment progress with real-time logging
+- Verify service health and connectivity post-deployment
+- Generate comprehensive audit trails for troubleshooting
+- Provide clear success/failure indicators with actionable guidance
 
-REPORTING AND MONITORING:
-- Real-time progress tracking across all agents
-- Comprehensive cost and performance metrics
-- Detailed deployment reports and documentation
-- Success/failure analysis and recommendations
-- Operational runbooks and maintenance guides
+OPERATIONAL FOCUS:
+- Assume configurations have been pre-approved by DockerComposerAgent
+- Focus on deployment execution, monitoring, and verification
+- Provide detailed operational guidance and maintenance procedures
+- Generate comprehensive documentation for ongoing operations
+- Implement monitoring and alerting for deployed services
 
-This orchestrator delegates all specific technical work to specialized subagents while maintaining overall coordination, monitoring, and quality assurance.
+Your goal is to execute reliable, monitored deployments of pre-approved configurations while providing comprehensive operational guidance and monitoring capabilities.
 `;
   }
 
@@ -411,33 +198,33 @@ This orchestrator delegates all specific technical work to specialized subagents
 
   getConfig(): AgentConfig {
     return {
-      name: 'Docker Deployment Orchestrator',
-      version: '2.0.0',
-      description: 'Parallel Docker deployment orchestrator coordinating 6 specialized subagents for maximum efficiency',
+      name: 'Docker Deployment Executor',
+      version: '1.0.0',
+      description: 'Deploys pre-approved Docker configurations with comprehensive monitoring and verification',
       defaultOptions: {
-        timeout_ms: 1200000, // 20 minutes (reduced due to parallelization)
-        maxTurns: 10, // Orchestrator only coordinates, subagents do the work
-        permissionMode: 'acceptEdits'
+        timeout_ms: 1200000, // 20 minutes for deployment and verification
+        maxTurns: 40, // Focused deployment execution
+        permissionMode: 'acceptEdits',
+        includePartialMessages: true
       },
       capabilities: [
-        'Parallel subagent coordination and execution',
-        'Infrastructure analysis through specialized agent',
-        'Service research and documentation discovery',
-        'Security-focused configuration generation',
-        'Automated credential and certificate management',
-        'Systematic deployment execution and monitoring',
-        'Comprehensive verification and validation',
-        'Cross-agent communication and data flow',
-        'Error handling and recovery coordination',
-        'Performance optimization and cost management'
+        'Pre-approved configuration validation and deployment',
+        'Real-time deployment monitoring and progress tracking',
+        'Comprehensive container health checking',
+        'Service connectivity and endpoint verification',
+        'Automated rollback on deployment failure',
+        'SSL/TLS certificate validation and monitoring',
+        'Operational documentation and maintenance guidance',
+        'Log collection and troubleshooting support',
+        'Performance monitoring and resource optimization'
       ],
-      requiredTools: ['Read', 'Write'], // Minimal tools - subagents handle specifics
-      optionalTools: [], // Orchestrator delegates tool usage to subagents
-      typicalExecutionTime: 600000, // 10 minutes typical (40% reduction from parallelization)
+      requiredTools: ['Read', 'Write', 'Bash'],
+      optionalTools: ['Glob', 'Grep'],
+      typicalExecutionTime: 600000, // 10 minutes typical
       costEstimate: {
-        min: 0.75, // Sum of all subagent costs
-        max: 3.50,
-        typical: 1.85
+        min: 0.20,
+        max: 1.00,
+        typical: 0.50
       }
     };
   }

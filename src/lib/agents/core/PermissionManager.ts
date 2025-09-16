@@ -1,8 +1,10 @@
 import type {
   CanUseToolCallback,
   ToolContext,
-  LogCallback
+  LogCallback,
+  PermissionResult
 } from './types';
+import type { PermissionUpdate } from '@anthropic-ai/claude-code';
 
 /**
  * Manages fine-grained tool permissions and security policies
@@ -22,32 +24,56 @@ export class PermissionManager {
    * Create a permission callback function for SDK use
    */
   createPermissionCallback(): CanUseToolCallback {
-    return async (toolName: string, input: any, context: ToolContext): Promise<boolean> => {
+    return async (toolName: string, input: Record<string, unknown>, options: { signal: AbortSignal; suggestions?: PermissionUpdate[] }): Promise<PermissionResult> => {
       const startTime = Date.now();
+      
+      // Create a mock context from available information
+      const context: ToolContext = {
+        agentType: 'unknown',
+        executionId: 'sdk-execution',
+        currentTurn: 1,
+        totalCost: 0,
+        previousTools: [],
+        timeElapsed: 0
+      };
       
       try {
         // Check global rules first
         const globalResult = await this.checkGlobalRules(toolName, input, context);
         if (!globalResult.allowed) {
           this.auditDenial(toolName, input, context, globalResult.reason, 'global_rule');
-          return false;
+          return {
+            behavior: 'deny',
+            message: globalResult.reason
+          };
         }
 
         // Check tool-specific policy
         const policyResult = await this.checkToolPolicy(toolName, input, context);
         if (!policyResult.allowed) {
           this.auditDenial(toolName, input, context, policyResult.reason, 'tool_policy');
-          return false;
+          return {
+            behavior: 'deny',
+            message: policyResult.reason
+          };
         }
 
         // Log successful permission grant
         this.auditApproval(toolName, input, context, Date.now() - startTime);
-        return true;
+        return {
+          behavior: 'allow',
+          updatedInput: input,
+          updatedPermissions: options.suggestions
+        };
 
       } catch (error) {
+        const errorMessage = `Permission check error: ${error}`;
         this.log(`❌ Permission check error for ${toolName}: ${error}`, 'error');
-        this.auditDenial(toolName, input, context, `Permission check error: ${error}`, 'system_error');
-        return false;
+        this.auditDenial(toolName, input, context, errorMessage, 'system_error');
+        return {
+          behavior: 'deny',
+          message: errorMessage
+        };
       }
     };
   }
@@ -83,7 +109,7 @@ export class PermissionManager {
     toolName: string,
     input: any,
     context: ToolContext
-  ): Promise<PermissionResult> {
+  ): Promise<InternalPermissionResult> {
     for (const rule of this.globalRules) {
       if (rule.condition && !rule.condition(toolName, input, context)) {
         continue; // Rule doesn't apply
@@ -105,7 +131,7 @@ export class PermissionManager {
     toolName: string,
     input: any,
     context: ToolContext
-  ): Promise<PermissionResult> {
+  ): Promise<InternalPermissionResult> {
     const policy = this.policies.get(toolName);
     if (!policy) {
       return { allowed: true, reason: 'No specific policy' };
@@ -261,7 +287,7 @@ export class PermissionManager {
   /**
    * Check file access permissions
    */
-  private checkFileAccess(filePath: string, operation: 'read' | 'write'): PermissionResult {
+  private checkFileAccess(filePath: string, operation: 'read' | 'write'): InternalPermissionResult {
     // Block access to sensitive system files
     const sensitivePatterns = [
       /\/etc\/passwd$/,
@@ -478,16 +504,16 @@ export class PermissionManager {
 // Permission-related interfaces
 interface ToolPolicy {
   description: string;
-  check: (toolName: string, input: any, context: ToolContext) => Promise<PermissionResult>;
+  check: (toolName: string, input: any, context: ToolContext) => Promise<InternalPermissionResult>;
 }
 
 interface GlobalRule {
   description: string;
   condition?: (toolName: string, input: any, context: ToolContext) => boolean;
-  check: (toolName: string, input: any, context: ToolContext) => Promise<PermissionResult>;
+  check: (toolName: string, input: any, context: ToolContext) => Promise<InternalPermissionResult>;
 }
 
-interface PermissionResult {
+interface InternalPermissionResult {
   allowed: boolean;
   reason: string;
 }

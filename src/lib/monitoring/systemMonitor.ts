@@ -352,7 +352,7 @@ export class SystemMonitor extends EventEmitter {
         loadAverage15m: stats.loadAverage[2],
         diskFreeBytes: stats.diskSpace.free,
         diskTotalBytes: stats.diskSpace.total,
-        internetConnected: stats.networkConnectivity.internet ? 1 : 0,
+        internetConnected: stats.networkConnectivity.internet,
         claudeApiLatencyMs: stats.networkConnectivity.latency || null
       };
 

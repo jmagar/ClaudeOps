@@ -2,7 +2,7 @@ import { BaseAgent } from './core/BaseAgent';
 import type { 
   BaseAgentOptions, 
   AgentConfig,
-  TokenUsage
+  PermissionMode
 } from './core/types';
 
 // Extend base options with system health specific options
@@ -11,21 +11,6 @@ export interface SystemHealthOptions extends BaseAgentOptions {
   include_security_scan?: boolean;
   detailed_service_analysis?: boolean;
   include_docker?: boolean;
-}
-
-// Legacy interface compatibility - re-export from core types
-export interface AgentResult {
-  executionId: string;
-  agentType: string;
-  status: 'completed' | 'failed' | 'timeout' | 'cancelled';
-  result: string;
-  cost: number;
-  duration: number;
-  usage: TokenUsage;
-  logs: string[];
-  timestamp: string;
-  error?: string;
-  summary?: string;
 }
 
 // Legacy interface compatibility
@@ -167,28 +152,6 @@ SAFETY:
     };
   }
 
-  /**
-   * Legacy method for backward compatibility
-   * Now simply calls the base execute method
-   */
-  async execute(options: SystemHealthOptions = {}): Promise<AgentResult> {
-    const result = await super.execute(options);
-    
-    // Convert to legacy format for backward compatibility
-    return {
-      executionId: result.executionId,
-      agentType: result.agentType,
-      status: result.status,
-      result: result.result,
-      cost: result.cost,
-      duration: result.duration,
-      usage: result.usage,
-      logs: result.logs,
-      timestamp: result.timestamp,
-      error: result.error,
-      summary: result.summary
-    };
-  }
 
   /**
    * Get agent capability information (legacy method)
@@ -215,7 +178,7 @@ SAFETY:
   /**
    * Override permission mode for system health investigations
    */
-  getPermissionMode(): BaseAgentOptions['permissionMode'] {
+  getPermissionMode(): PermissionMode {
     return 'acceptEdits'; // System health needs bash access
   }
 

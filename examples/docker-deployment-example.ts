@@ -22,21 +22,17 @@ async function deployService(serviceName: string) {
   try {
     // Execute deployment with comprehensive options
     const result = await agent.execute({
-      // Required service name
+      // Required configuration directory
+      configDirectory: `/opt/docker-configs/${serviceName}`,
+      
+      // Service identification
       serviceName: serviceName,
       
       // Deployment configuration
-      environment: 'production',
-      forceLatest: false,           // Use stable versions
-      enableSSL: true,              // Enable SSL/TLS
-      generateCredentials: true,    // Generate secure credentials
-      securityScanEnabled: true,    // Enable security scanning
+      dryRun: false,                // Execute actual deployment
+      backupBeforeDeployment: true, // Create backup before deployment
+      rollbackOnFailure: true,      // Rollback on deployment failure
       monitoringEnabled: true,      // Enable monitoring setup
-      
-      // Optional custom configuration
-      // customPorts: { web: 8080, admin: 8081 },
-      // volumeMounts: { data: '/opt/app/data', logs: '/opt/app/logs' },
-      // environmentVariables: { NODE_ENV: 'production' },
       
       // Framework options
       timeout_ms: 1800000,          // 30 minutes for complex deployments
@@ -96,11 +92,11 @@ async function deployService(serviceName: string) {
 
     return result;
 
-  } catch (error) {
-    console.error(`\n💥 Deployment failed for ${serviceName}:`, error.message);
+  } catch (error: unknown) {
+    console.error(`\n💥 Deployment failed for ${serviceName}:`, error instanceof Error ? error.message : String(error));
     
     // Check if there's a session that can be resumed
-    if (error.context?.sessionId) {
+    if (error instanceof Error && 'context' in error && error.context && typeof error.context === 'object' && 'sessionId' in error.context) {
       console.log(`\n🔄 You can resume this deployment with session ID: ${error.context.sessionId}`);
     }
     
@@ -133,8 +129,8 @@ async function deployMultipleServices() {
         await new Promise(resolve => setTimeout(resolve, 30000));
       }
       
-    } catch (error) {
-      console.error(`\n❌ Failed to deploy ${service}:`, error.message);
+    } catch (error: unknown) {
+      console.error(`\n❌ Failed to deploy ${service}:`, error instanceof Error ? error.message : String(error));
       console.log(`\n⏭️ Continuing with next service...`);
     }
   }
@@ -153,7 +149,7 @@ if (require.main === module) {
   const command = args[0];
   const serviceName = args[1];
 
-  async function main() {
+  const main = async () => {
     try {
       switch (command) {
         case 'deploy':
@@ -199,8 +195,8 @@ The agent will:
   ✅ Generate comprehensive deployment report
           `);
       }
-    } catch (error) {
-      console.error('❌ Execution failed:', error.message);
+    } catch (error: unknown) {
+      console.error('❌ Execution failed:', error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
   }

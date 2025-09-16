@@ -11,6 +11,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
+import type { ReactNode } from 'react';
 import {
   AreaChart,
   Area,
@@ -429,9 +430,10 @@ export function CostCharts() {
                     cy="50%"
                     outerRadius={80}
                     dataKey="totalCost"
-                    label={({ agentType, percent }: { agentType: string; percent: number }) => 
-                      `${agentType} (${(percent * 100).toFixed(1)}%)`
-                    }
+                    label={(props: any): ReactNode => {
+                      const { payload, percent } = props;
+                      return `${payload.agentType} (${(percent * 100).toFixed(1)}%)`;
+                    }}
                   >
                     {agentData.map((_, index) => (
                       <Cell 

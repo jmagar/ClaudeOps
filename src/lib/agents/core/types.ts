@@ -1,5 +1,5 @@
 // Import SDK types - these ARE available from the Claude Code SDK
-export type {
+import type {
   SDKMessage,
   SDKAssistantMessage,
   SDKUserMessage,
@@ -17,6 +17,26 @@ export type {
   PreToolUseHookInput,
   PostToolUseHookInput
 } from '@anthropic-ai/claude-code';
+
+// Re-export for use by other modules
+export type {
+  SDKMessage,
+  SDKAssistantMessage,
+  SDKUserMessage,
+  SDKResultMessage,
+  SDKSystemMessage,
+  SDKPartialAssistantMessage,
+  Options,
+  PermissionMode,
+  CanUseTool,
+  PermissionResult,
+  HookEvent,
+  HookCallback,
+  HookCallbackMatcher,
+  HookInput,
+  PreToolUseHookInput,
+  PostToolUseHookInput
+};
 
 // Token usage interface - define locally to avoid circular imports
 export interface TokenUsage {
@@ -40,6 +60,15 @@ export interface BaseAgentResult {
   error?: string;
   summary?: string;
   sessionId?: string;
+  // Enhanced logging data
+  structuredLogs?: StructuredLogEntry[];
+  actionHistory?: ActionContext[];
+  performanceMetrics?: {
+    totalActions: number;
+    toolExecutions: number;
+    averageActionDuration?: number;
+    slowestAction?: { actionId: string; duration: number; actionType: ClaudeActionType };
+  };
 }
 
 // Base options that all agents can use
@@ -54,6 +83,11 @@ export interface BaseAgentOptions {
   onProgress?: ProgressCallback;
   abortController?: AbortController;
   hooks?: AgentHooks;
+  // Enhanced logging configuration
+  loggingLevel?: 'basic' | 'detailed' | 'debug';
+  enableActionClassification?: boolean;
+  enablePerformanceTiming?: boolean;
+  enableStructuredLogs?: boolean;
 }
 
 // Hook system interfaces using actual SDK types
@@ -69,6 +103,39 @@ export type LogCallback = (message: string, level?: 'info' | 'warn' | 'error' | 
 export type ProgressCallback = (progress: ProgressUpdate) => void;
 export type ErrorHook = (error: AgentError, context: ErrorContext) => Promise<ErrorRecovery>;
 export type CompleteHook = (result: BaseAgentResult) => Promise<void>;
+
+// Enhanced logging types
+export type ClaudeActionType = 'tool_use' | 'reasoning' | 'response_generation' | 'error_handling' | 'initialization' | 'completion';
+
+export interface StructuredLogEntry {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  actionType?: ClaudeActionType;
+  actionId?: string;
+  executionId: string;
+  agentType: string;
+  message: string;
+  duration?: number;
+  toolName?: string;
+  toolInput?: Record<string, any>;
+  toolOutput?: string;
+  error?: string;
+  context?: Record<string, any>;
+  performance?: {
+    startTime: number;
+    endTime: number;
+    duration: number;
+  };
+}
+
+export interface ActionContext {
+  actionId: string;
+  actionType: ClaudeActionType;
+  startTime: number;
+  toolName?: string;
+  toolInput?: Record<string, any>;
+  parentActionId?: string;
+}
 
 // Progress tracking
 export interface ProgressUpdate {
@@ -97,6 +164,12 @@ export interface ErrorContext {
   totalCost: number;
   timeElapsed: number;
   lastTool?: string;
+  // Enhanced error context
+  actionHistory?: ActionContext[];
+  currentContext?: Record<string, any>;
+  recoverySuggestions?: string[];
+  errorStack?: string;
+  relatedActions?: string[];
 }
 
 export interface ErrorRecovery {
@@ -182,12 +255,7 @@ export interface IBaseAgent<TOptions extends BaseAgentOptions = BaseAgentOptions
 export type AgentType = 
   | 'system-health' 
   | 'docker-deployment'
-  | 'infrastructure-analysis'
-  | 'service-research'
-  | 'config-generator'
-  | 'security-credentials'
-  | 'deployment-executor'
-  | 'verification'
+  | 'docker-composer'
   | 'example' 
   | string;
 
