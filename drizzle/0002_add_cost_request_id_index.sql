@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS `cost_request_id_idx` ON `cost_tracking` (`request_id`);

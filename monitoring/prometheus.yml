@@ -1,0 +1,48 @@
+# Prometheus Configuration for ClaudeOps Monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: 'claudeops'
+
+rule_files:
+  # - "alert_rules.yml"
+
+scrape_configs:
+  # ClaudeOps Application Metrics
+  - job_name: 'claudeops-app'
+    static_configs:
+      - targets: ['claudeops:9090']
+    metrics_path: '/api/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    honor_labels: true
+    params:
+      format: ['prometheus']
+
+  # Traefik Reverse Proxy Metrics
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['reverse-proxy:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Node Exporter (if available)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+    scrape_interval: 15s
+    honor_labels: true
+
+  # cAdvisor (Docker Container Metrics)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

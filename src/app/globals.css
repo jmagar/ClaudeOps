@@ -1,0 +1,302 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-background: 0 0% 100%;
+  --color-foreground: 222.2 84% 4.9%;
+  --color-card: 0 0% 100%;
+  --color-card-foreground: 222.2 84% 4.9%;
+  --color-popover: 0 0% 100%;
+  --color-popover-foreground: 222.2 84% 4.9%;
+  --color-primary: 222.2 47.4% 11.2%;
+  --color-primary-foreground: 210 40% 98%;
+  --color-secondary: 210 40% 96%;
+  --color-secondary-foreground: 222.2 47.4% 11.2%;
+  --color-muted: 210 40% 96%;
+  --color-muted-foreground: 215.4 16.3% 46.9%;
+  --color-accent: 210 40% 96%;
+  --color-accent-foreground: 222.2 47.4% 11.2%;
+  --color-destructive: 0 84.2% 60.2%;
+  --color-destructive-foreground: 210 40% 98%;
+  --color-border: 214.3 31.8% 91.4%;
+  --color-input: 214.3 31.8% 91.4%;
+  --color-ring: 222.2 84% 4.9%;
+  --color-sidebar: 0 0% 98%;
+  --color-sidebar-foreground: 240 5.3% 26.1%;
+  --color-sidebar-primary: 240 5.9% 10%;
+  --color-sidebar-primary-foreground: 0 0% 98%;
+  --color-sidebar-accent: 240 4.8% 95.9%;
+  --color-sidebar-accent-foreground: 240 5.9% 10%;
+  --color-sidebar-border: 220 13% 91%;
+  --color-sidebar-ring: 217.2 91.2% 59.8%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --color-background: 222.2 84% 4.9%;
+  --color-foreground: 210 40% 98%;
+  --color-card: 222.2 84% 4.9%;
+  --color-card-foreground: 210 40% 98%;
+  --color-popover: 222.2 84% 4.9%;
+  --color-popover-foreground: 210 40% 98%;
+  --color-primary: 210 40% 98%;
+  --color-primary-foreground: 222.2 47.4% 11.2%;
+  --color-secondary: 217.2 32.6% 17.5%;
+  --color-secondary-foreground: 210 40% 98%;
+  --color-muted: 217.2 32.6% 17.5%;
+  --color-muted-foreground: 215 20.2% 65.1%;
+  --color-accent: 217.2 32.6% 17.5%;
+  --color-accent-foreground: 210 40% 98%;
+  --color-destructive: 0 62.8% 30.6%;
+  --color-destructive-foreground: 210 40% 98%;
+  --color-border: 217.2 32.6% 17.5%;
+  --color-input: 217.2 32.6% 17.5%;
+  --color-ring: 212.7 26.8% 83.9%;
+  --color-sidebar: 240 5.9% 10%;
+  --color-sidebar-foreground: 240 4.8% 95.9%;
+  --color-sidebar-primary: 224.3 76.3% 48%;
+  --color-sidebar-primary-foreground: 0 0% 100%;
+  --color-sidebar-accent: 240 3.7% 15.9%;
+  --color-sidebar-accent-foreground: 240 4.8% 95.9%;
+  --color-sidebar-border: 240 3.7% 15.9%;
+  --color-sidebar-ring: 217.2 91.2% 59.8%;
+}
+
+/* Global base styles for FOUC prevention */
+:root {
+  color-scheme: light dark;
+  background-color: hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
+}
+
+html {
+  background-color: hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
+}
+
+/* Custom animations for Tailwind v4 compatibility */
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes zoomOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromBottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-in {
+  animation-fill-mode: forwards;
+}
+
+.animate-out {
+  animation-fill-mode: forwards;
+}
+
+.fade-in-0 {
+  animation: fadeIn 150ms ease-out;
+}
+
+.fade-out-0 {
+  animation: fadeOut 150ms ease-in;
+}
+
+.zoom-in-95 {
+  animation: zoomIn 150ms ease-out;
+}
+
+.zoom-out-95 {
+  animation: zoomOut 150ms ease-in;
+}
+
+.slide-in-from-top-2 {
+  animation: slideInFromTop 150ms ease-out;
+}
+
+.slide-in-from-bottom-2 {
+  animation: slideInFromBottom 150ms ease-out;
+}
+
+.slide-in-from-left-2 {
+  animation: slideInFromLeft 150ms ease-out;
+}
+
+.slide-in-from-right-2 {
+  animation: slideInFromRight 150ms ease-out;
+}
+
+/* Data attribute based animations for Radix UI components */
+[data-state="open"]:not([data-side]) {
+  animation: fadeIn 150ms ease-out, zoomIn 150ms ease-out;
+}
+
+[data-state="closed"]:not([data-side]) {
+  animation: fadeOut 150ms ease-in, zoomOut 150ms ease-in;
+}
+
+[data-state="open"][data-side="top"] {
+  animation: fadeIn 150ms ease-out, slideInFromTop 150ms ease-out;
+}
+
+[data-state="open"][data-side="bottom"] {
+  animation: fadeIn 150ms ease-out, slideInFromBottom 150ms ease-out;
+}
+
+[data-state="open"][data-side="left"] {
+  animation: fadeIn 150ms ease-out, slideInFromLeft 150ms ease-out;
+}
+
+[data-state="open"][data-side="right"] {
+  animation: fadeIn 150ms ease-out, slideInFromRight 150ms ease-out;
+}
+
+[data-state="closed"][data-side] {
+  animation: fadeOut 150ms ease-in;
+}
+
+/* Additional animations for sheet components */
+[data-state="open"].slide-in-from-left-half {
+  animation: fadeIn 150ms ease-out;
+  transform: translateX(-50%) translateY(-50%);
+}
+
+[data-state="open"].slide-in-from-top-half {
+  animation: fadeIn 150ms ease-out;
+  transform: translateX(-50%) translateY(-48%);
+}
+
+[data-state="closed"].slide-out-to-left-half {
+  animation: fadeOut 150ms ease-in;
+  transform: translateX(-50%) translateY(-50%);
+}
+
+[data-state="closed"].slide-out-to-top-half {
+  animation: fadeOut 150ms ease-in;
+  transform: translateX(-50%) translateY(-48%);
+}
+
+/* Support for duration classes */
+.duration-200 {
+  animation-duration: 200ms;
+}
+
+.duration-300 {
+  animation-duration: 300ms;
+}
+
+.duration-500 {
+  animation-duration: 500ms;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  /* Disable specific animations that might be problematic */
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+  
+  /* Disable transform-based animations */
+  [data-state="open"],
+  [data-state="closed"] {
+    animation: none !important;
+    transform: none !important;
+  }
+}

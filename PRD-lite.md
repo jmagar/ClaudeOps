@@ -1,8 +1,8 @@
-# Claude Agent Runner Lite - Product Requirements Document
+# ClaudeOps - Product Requirements Document
 
 ## Executive Summary
 
-Claude Agent Runner Lite is a streamlined AI-powered automation system for homelabs. It combines a modern React-based dashboard with a simplified backend architecture - a single management server that executes Python-based AI agents on your infrastructure via SSH. No complex orchestration, no Docker containers on target nodes, just simple, effective automation powered by Claude with a polished user experience.
+ClaudeOps is a streamlined AI-powered automation system for homelabs. It combines a modern React-based dashboard with a simplified backend architecture - a single management server that executes Python-based AI agents on your infrastructure via SSH. No complex orchestration, no Docker containers on target nodes, just simple, effective automation powered by Claude with a polished user experience.
 
 ## Core Philosophy
 
@@ -30,7 +30,7 @@ Claude Agent Runner Lite is a streamlined AI-powered automation system for homel
 
 ```
 ┌─────────────────────────────────────────┐
-│      Claude Agent Runner Lite           │
+│            ClaudeOps                    │
 │         (Single Container)               │
 │                                          │
 │  ┌────────────────────────────────────┐ │
@@ -666,6 +666,6 @@ async def run(ssh_client, config):
 
 ## Conclusion
 
-Claude Agent Runner Lite maintains the polished, modern frontend experience while dramatically simplifying the backend architecture. This approach delivers a production-quality user interface that homelabbers will love, while keeping deployment and maintenance simple. The 10-week timeline is aggressive but achievable with the simplified backend and established frontend tooling.
+ClaudeOps maintains the polished, modern frontend experience while dramatically simplifying the backend architecture. This approach delivers a production-quality user interface that homelabbers will love, while keeping deployment and maintenance simple. The 10-week timeline is aggressive but achievable with the simplified backend and established frontend tooling.
 
 The key insight remains: homelabbers want powerful automation with a great UI, but without the complexity of enterprise orchestration systems. By combining React 19's excellent developer experience with SSH-based simplicity, we can deliver both sophistication and maintainability.

@@ -1,0 +1,19 @@
+# Tailwind CSS v4 browser support requirements
+# Minimum versions for modern CSS features (OKLCH colors, range media queries, etc.)
+
+# Production environment
+[production]
+Chrome >= 120
+Safari >= 16.4
+ios_saf >= 16.4
+Firefox >= 128
+Edge >= 120
+
+# Development environment (can be more permissive)
+[development]
+Chrome >= 120
+Safari >= 16.4
+ios_saf >= 16.4
+Firefox >= 128
+Edge >= 120
+# last 1 version removed to maintain consistency with production targets
